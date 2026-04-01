@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Login institucional</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main class="login-shell">
+    <div class="card login-card">
+      <div class="auth-brand-wrap"><img class="auth-brand-logo" src="/assets/brand/logo-loopinedu-light.svg" alt="LoopinEdu" /></div>
+      <div class="badge">Acesso institucional</div>
+      <h1 style="margin-top:0;">Entrar no LoopinEdu</h1>
+      <p class="muted">Acesse seu ambiente escolar multi-tenant ou crie uma conta com trial de 15 dias.</p>
+      <form id="loginForm">
+        <div class="field">
+          <label>E-mail</label>
+          <input type="email" name="email" value="admin@loopinedu.com" required />
+        </div>
+        <div class="field">
+          <label>Senha</label>
+          <input type="password" name="password" value="123456" required />
+        </div>
+        <button class="btn primary" type="submit" style="width:100%;">Entrar</button>
+      </form>
+      <div class="auth-split-line"><span></span><small>ou</small><span></span></div>
+      <a class="btn" href="/signup.html" style="width:100%;">Criar escola e iniciar trial</a>
+      <p class="muted" style="margin-top:18px;">Login padrão demo: admin@loopinedu.com / 123456</p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { login, showToast, setLoadingState, getToken } from '/js/app.js';
+
+    if (getToken()) {
+      window.location.href = '/dashboard.html';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      setLoadingState(true, 'Autenticando ambiente institucional...');
+      try {
+        const payload = await login(formData.get('email'), formData.get('password'));
+        showToast('Login realizado com sucesso.');
+        window.location.href = payload.restricted ? '/billing.html' : '/dashboard.html';
+      } catch (error) {
+        showToast(error.message, 'error');
+      } finally {
+        setLoadingState(false);
+      }
+    });
+  </script>
+</body>
+</html>

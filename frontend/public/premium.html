@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Plano Premium</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, buildMiniBarChart } from '/js/app.js';
+
+    function roleRows(roles = {}) {
+      return Object.entries(roles).map(([key, role]) => `
+        <tr>
+          <td><strong>${escapeHtml(role.label)}</strong><div class="muted">${escapeHtml(role.description)}</div></td>
+          <td>${role.abilities.map((item) => `<span class="tiny-pill">${escapeHtml(item)}</span>`).join(' ')}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function load() {
+      setLoadingState(true, 'Abrindo workspace premium...');
+      const me = await requireAuth();
+      installShell({ title: 'Plano Premium', userName: me.full_name, user: me });
+      const [settings, insights] = await Promise.all([getJson('/tenant/settings'), getJson('/dashboard/premium-insights')]);
+      const tenant = settings.tenant || {};
+      setShellContent(`
+        <section class="page-section premium-page">
+          <div class="premium-hero card gradient-premium">
+            <div>
+              <div class="badge badge-premium">Workspace Premium</div>
+              <h1>Governança, branding e inteligência institucional no mesmo ambiente</h1>
+              <p class="muted">Personalize a presença da escola, organize usuários por perfil e acompanhe sinais de prioridade com mais profundidade.</p>
+            </div>
+            <div class="premium-hero-stats">
+              <div class="inline-stat"><div class="muted">Plano ativo</div><strong>${escapeHtml((tenant.plan || 'premium').toUpperCase())}</strong></div>
+              <div class="inline-stat"><div class="muted">Conclusão de respondentes</div><strong>${Number(insights.respondent_completion_rate || 0).toFixed(1)}%</strong></div>
+              <div class="inline-stat"><div class="muted">Ciclos em leitura</div><strong>${Number((insights.cycle_trends || []).length || 0)}</strong></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h2 style="margin-top:0;">Evolução por ciclo</h2>
+              ${buildMiniBarChart((insights.cycle_trends || []).map((item) => ({ label: item.label, value: Number(item.average_score || 0) })), { maxValue: 5 })}
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Branding institucional</h2><div class="muted">Ajuste os tons oficiais do ambiente Premium.</div></div><button class="btn primary" id="saveBrandingBtn">Salvar branding</button></div>
+              <div class="form-grid" style="margin-top:16px;">
+                <label>Nome da escola<input id="tenantName" value="${escapeHtml(tenant.name || '')}" /></label>
+                <label>Domínio personalizado<input id="tenantDomain" value="${escapeHtml(tenant.custom_domain || '')}" placeholder="app.suaescola.com.br" /></label>
+                <label>Logo URL<input id="tenantLogo" value="${escapeHtml(tenant.logo_url || '')}" placeholder="https://..." /></label>
+                <label>E-mail de billing<input id="tenantBilling" value="${escapeHtml(tenant.billing_email || '')}" /></label>
+                <label>Cor principal<input id="tenantPrimary" type="color" value="${escapeHtml(tenant.primary_color || '#1f8560')}" /></label>
+                <label>Cor secundária<input id="tenantSecondary" type="color" value="${escapeHtml(tenant.secondary_color || '#1f3c88')}" /></label>
+                <label>Cor destaque<input id="tenantAccent" type="color" value="${escapeHtml(tenant.accent_color || '#42c6c6')}" /></label>
+              </div>
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Radar premium</h2>
+              ${buildMiniBarChart((insights.strongest_classes || []).map((item) => ({ label: item.class_name, value: Number(item.average_score) })), { maxValue: 5 })}
+              <div class="card tight" style="margin-top:16px;">
+                <div class="muted">Alertas de divergência entre respondentes</div>
+                ${(insights.divergence_alerts || []).length ? insights.divergence_alerts.map((item) => `<div class="list-row"><strong>${escapeHtml(item.full_name)}</strong><span class="tiny-pill">Diferença ${Number(item.divergence || 0).toFixed(2)}</span></div>`).join('') : '<div class="empty-state">Sem divergências relevantes.</div>'}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h2 style="margin-top:0;">Evolução por ciclo</h2>
+              ${buildMiniBarChart((insights.cycle_trends || []).map((item) => ({ label: item.label, value: Number(item.average_score || 0) })), { maxValue: 5 })}
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Usuários do ambiente</h2><div class="muted">Perfis por permissão e colaboração institucional.</div></div><button class="btn secondary" id="createUserBtn">Novo usuário</button></div>
+              <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th></tr></thead><tbody>
+              ${(settings.users || []).map((user) => `<tr><td>${escapeHtml(user.full_name)}</td><td>${escapeHtml(user.email)}</td><td>${escapeHtml(user.role)}</td><td>${user.is_active ? 'Ativo' : 'Inativo'}</td></tr>`).join('')}
+              </tbody></table></div>
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Controle de permissões</h2>
+              <div class="table-wrap"><table><thead><tr><th>Perfil</th><th>Capacidades</th></tr></thead><tbody>${roleRows(settings.roles || {})}</tbody></table></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h2 style="margin-top:0;">Evolução por ciclo</h2>
+              ${buildMiniBarChart((insights.cycle_trends || []).map((item) => ({ label: item.label, value: Number(item.average_score || 0) })), { maxValue: 5 })}
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Estudantes prioritários</h2>
+              ${(insights.priority_students || []).length ? insights.priority_students.map((item) => `<div class="list-row"><div><strong>${escapeHtml(item.full_name)}</strong><div class="muted">Faixa ${escapeHtml(item.overall_band || '—')}</div></div><span class="tiny-pill">${Number(item.overall_score || 0).toFixed(2)}</span></div>`).join('') : '<div class="empty-state">Sem estudantes prioritários no momento.</div>'}
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Auditoria premium</h2>
+              ${(settings.audit || []).length ? settings.audit.map((item) => `<div class="list-row"><div><strong>${escapeHtml(item.action_label)}</strong><div class="muted">${new Date(item.created_at).toLocaleString('pt-BR')}</div></div></div>`).join('') : '<div class="empty-state">Nenhuma ação registrada ainda.</div>'}
+            </div>
+          </div>
+
+          <dialog id="createUserDialog" class="modal-dialog">
+            <form method="dialog" class="card" style="min-width:min(560px, 90vw);">
+              <div class="toolbar"><h3 style="margin:0;">Novo usuário premium</h3><button class="link-btn">Fechar</button></div>
+              <div class="form-grid" style="margin-top:16px;">
+                <label>Nome completo<input id="newUserName" required /></label>
+                <label>E-mail<input id="newUserEmail" type="email" required /></label>
+                <label>Senha temporária<input id="newUserPassword" required value="123456" /></label>
+                <label>Perfil<select id="newUserRole"><option value="coordinator">Coordinator</option><option value="teacher">Teacher</option><option value="specialist">Specialist</option><option value="admin">Admin</option></select></label>
+                <label>Telefone<input id="newUserPhone" /></label>
+                <label>Cor do avatar<input id="newUserColor" type="color" value="#42c6c6" /></label>
+              </div>
+              <div class="table-actions" style="margin-top:16px;"><button class="btn primary" id="submitUserBtn" type="button">Criar usuário</button></div>
+            </form>
+          </dialog>
+        </section>
+      `);
+
+      document.getElementById('saveBrandingBtn')?.addEventListener('click', async () => {
+        setLoadingState(true, 'Salvando branding premium...');
+        try {
+          await getJson('/tenant/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: document.getElementById('tenantName').value,
+              custom_domain: document.getElementById('tenantDomain').value,
+              logo_url: document.getElementById('tenantLogo').value,
+              billing_email: document.getElementById('tenantBilling').value,
+              primary_color: document.getElementById('tenantPrimary').value,
+              secondary_color: document.getElementById('tenantSecondary').value,
+              accent_color: document.getElementById('tenantAccent').value
+            })
+          });
+          showToast('Branding premium atualizado com sucesso.');
+          await load();
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      });
+
+      const dialog = document.getElementById('createUserDialog');
+      document.getElementById('createUserBtn')?.addEventListener('click', () => dialog.showModal());
+      document.getElementById('submitUserBtn')?.addEventListener('click', async () => {
+        setLoadingState(true, 'Criando usuário premium...');
+        try {
+          await getJson('/tenant/users', {
+            method: 'POST',
+            body: JSON.stringify({
+              full_name: document.getElementById('newUserName').value,
+              email: document.getElementById('newUserEmail').value,
+              password: document.getElementById('newUserPassword').value,
+              role: document.getElementById('newUserRole').value,
+              phone: document.getElementById('newUserPhone').value,
+              avatar_color: document.getElementById('newUserColor').value
+            })
+          });
+          dialog.close();
+          showToast('Usuário premium criado com sucesso.');
+          await load();
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      });
+
+      setLoadingState(false);
+    }
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${escapeHtml(error.message)}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

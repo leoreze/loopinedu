@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Dashboard institucional</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, statusBadge, buildMiniBarChart, buildProgressDonut, formatDimensionLabel } from '/js/app.js';
+
+    async function load() {
+      setLoadingState(true, 'Montando dashboard institucional...');
+      const me = await requireAuth();
+      installShell({ title: 'Dashboard institucional', userName: me.full_name, user: me });
+      setShellContent(`
+        <section class="page-section">
+          <div class="grid-4" id="metrics"></div><div class="card" id="tenantBanner"></div>
+          <div class="chart-grid">
+            <div class="card chart-card">
+              <div class="toolbar"><div><h2 style="margin:0;">Desempenho por dimensão</h2><div class="muted">Leitura consolidada das quatro frentes do método.</div></div></div>
+              <div id="dimensionChart"></div>
+            </div>
+            <div class="card chart-card">
+              <div class="toolbar"><div><h2 style="margin:0;">Saúde geral atual</h2><div class="muted">Score médio global do ambiente institucional.</div></div></div>
+              <div id="overallGauge"></div>
+              <div class="inline-stat-grid" id="insightsGrid" style="margin-top:18px;"></div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Alertas prioritários</h2><div class="muted">Alunos com dimensões em atenção.</div></div></div>
+              <div id="alerts"></div>
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Distribuição por turma</h2><div class="muted">Média geral e volume de diagnósticos.</div></div></div>
+              <div id="byClassChart"></div>
+              <div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Turma</th><th>Total</th><th>Média</th></tr></thead><tbody id="byClass"></tbody></table></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Evolução por ciclo</h2><div class="muted">Tendência consolidada do score geral.</div></div></div>
+              <div id="trendChart"></div>
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Insights Premium</h2><div class="muted">Leitura de prioridade e divergência entre respondentes.</div></div></div>
+              <div id="premiumInsights"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="toolbar"><div><h2 style="margin:0;">Distribuição por série</h2><div class="muted">Panorama consolidado por faixa escolar.</div></div></div>
+            <div id="byGradeChart"></div>
+            <div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Série</th><th>Total</th><th>Média</th></tr></thead><tbody id="byGrade"></tbody></table></div>
+          </div>
+        </section>
+      `);
+
+      const overview = await getJson('/dashboard/overview');
+      const alerts = await getJson('/dashboard/alerts');
+      let byClass = [];
+      let byGrade = [];
+      let trends = [];
+      let premium = null;
+      let advancedLocked = false;
+      try {
+        [byClass, byGrade, trends] = await Promise.all([
+          getJson('/dashboard/by-class'),
+          getJson('/dashboard/by-grade'),
+          getJson('/dashboard/trends')
+        ]);
+      } catch (error) {
+        if (error.code === 'FEATURE_BLOCKED') {
+          advancedLocked = true;
+        } else {
+          throw error;
+        }
+      }
+
+      document.getElementById('tenantBanner').innerHTML = `<div class="toolbar"><div><h2 style="margin:0;">${escapeHtml(overview.tenant?.name || me.tenant_name || 'Ambiente')}</h2><div class="muted">Slug ${escapeHtml(overview.tenant?.slug || me.tenant_slug || '-')} • Plano ${escapeHtml((overview.tenant?.plan || me.plan || 'trial').toUpperCase())}</div></div><div class="inline-stat"><div class="muted">Trial</div><strong>${escapeHtml(new Date(overview.tenant?.trial_ends_at || me.trial_ends_at || Date.now()).toLocaleDateString('pt-BR'))}</strong></div></div>`;
+
+      document.getElementById('metrics').innerHTML = [
+        ['Total de estudantes', overview.total_students || 0],
+        ['Diagnósticos concluídos', overview.completed_assessments || 0],
+        ['Média geral', overview.average_overall_score || 0],
+        ['Alertas emocionais', overview.emotional_alerts || 0]
+      ].map(([label, value]) => `<div class="card metric-card"><div class="muted">${label}</div><div class="kpi">${value}</div></div>`).join('');
+
+      const dimensionItems = [
+        { label: formatDimensionLabel('cognitive'), value: Number(overview.avg_cognitive || 0) },
+        { label: formatDimensionLabel('organization'), value: Number(overview.avg_organization || 0) },
+        { label: formatDimensionLabel('relational'), value: Number(overview.avg_relational || 0) },
+        { label: formatDimensionLabel('emotional'), value: Number(overview.avg_emotional || 0) }
+      ];
+      document.getElementById('dimensionChart').innerHTML = buildMiniBarChart(dimensionItems, { maxValue: 5 });
+      document.getElementById('overallGauge').innerHTML = buildProgressDonut(Number(overview.average_overall_score || 0), 5, 'Média geral');
+      document.getElementById('insightsGrid').innerHTML = `
+        <div class="inline-stat"><div class="muted">Dimensão crítica</div><strong>${escapeHtml(formatDimensionLabel(overview.critical_dimension || '-'))}</strong></div>
+        <div class="inline-stat"><div class="muted">Dimensão forte</div><strong>${escapeHtml(formatDimensionLabel(overview.strongest_dimension || '-'))}</strong></div>
+        <div class="inline-stat"><div class="muted">Alertas emocionais</div><strong>${Number(overview.emotional_alerts || 0)}</strong></div>
+        <div class="inline-stat"><div class="muted">Alertas de organização</div><strong>${Number(overview.organization_alerts || 0)}</strong></div>
+      `;
+
+      document.getElementById('alerts').innerHTML = alerts.length ? `
+        <div class="table-wrap"><table><thead><tr><th>Estudante</th><th>Emocional</th><th>Organização</th><th>Status</th></tr></thead><tbody>
+          ${alerts.map((item) => `<tr><td>${escapeHtml(item.full_name)}</td><td>${item.emotional_score ?? '--'}</td><td>${item.organization_score ?? '--'}</td><td>${statusBadge('completed')}</td></tr>`).join('')}
+        </tbody></table></div>
+      ` : '<div class="empty-state">Nenhum alerta crítico encontrado.</div>';
+
+      const classItems = byClass.map((item) => ({ label: item.class_name || 'Sem turma', value: Number(item.average_score || 0) }));
+      document.getElementById('byClassChart').innerHTML = advancedLocked ? '<div class="empty-state">Disponível nos planos Pro e Premium. <a href="/billing.html">Fazer upgrade</a>.</div>' : buildMiniBarChart(classItems, { maxValue: 5 });
+      document.getElementById('byClass').innerHTML = byClass.map((item) => `<tr><td>${escapeHtml(item.class_name || 'Sem turma')}</td><td>${item.total_assessments}</td><td>${item.average_score}</td></tr>`).join('') || '<tr><td colspan="3">Sem dados.</td></tr>';
+
+      try { premium = await getJson('/dashboard/premium-insights'); } catch (error) { premium = null; }
+      const trendItems = trends.map((item) => ({ label: item.label || 'Ciclo', value: Number(item.average_score || 0) }));
+      document.getElementById('trendChart').innerHTML = advancedLocked ? '<div class="empty-state">Disponível nos planos Pro e Premium. <a href="/billing.html">Fazer upgrade</a>.</div>' : buildMiniBarChart(trendItems, { maxValue: 5 });
+      document.getElementById('premiumInsights').innerHTML = premium ? `
+        <div class="inline-stat-grid">
+          <div class="inline-stat"><div class="muted">Conclusão dos respondentes</div><strong>${Number(premium.respondent_completion_rate || 0).toFixed(1)}%</strong></div>
+          <div class="inline-stat"><div class="muted">Prioridades</div><strong>${(premium.priority_students || []).length}</strong></div>
+        </div>
+        <div style="margin-top:14px;">${buildMiniBarChart((premium.divergence_alerts || []).map((item) => ({ label: item.full_name, value: Number(item.divergence || 0) })), { maxValue: 5 })}</div>
+      ` : '<div class="empty-state">Disponível no Premium Workspace.</div>';
+      const gradeItems = byGrade.map((item) => ({ label: item.grade_level || 'Sem série', value: Number(item.average_score || 0) }));
+      document.getElementById('byGradeChart').innerHTML = advancedLocked ? '<div class="empty-state">Disponível nos planos Pro e Premium. <a href="/billing.html">Fazer upgrade</a>.</div>' : buildMiniBarChart(gradeItems, { maxValue: 5 });
+      document.getElementById('byGrade').innerHTML = byGrade.map((item) => `<tr><td>${escapeHtml(item.grade_level || 'Sem série')}</td><td>${item.total_assessments}</td><td>${item.average_score}</td></tr>`).join('') || '<tr><td colspan="3">Sem dados.</td></tr>';
+      setLoadingState(false);
+    }
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${error.message}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

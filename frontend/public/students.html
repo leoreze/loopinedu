@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Estudantes</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="card modal">
+      <div class="toolbar"><h2 id="modalTitle" style="margin:0;">Novo estudante</h2><button class="btn" type="button" id="closeModal">Fechar</button></div>
+      <form id="studentForm" style="margin-top:16px;">
+        <input type="hidden" name="id" />
+        <div class="grid-2">
+          <div class="field"><label>Nome completo</label><input name="full_name" required /></div>
+          <div class="field"><label>Data de nascimento</label><input name="birth_date" type="date" /></div>
+          <div class="field"><label>Série</label><input name="grade_level" /></div>
+          <div class="field"><label>Turma</label><input name="class_name" /></div>
+          <div class="field"><label>Escola</label><input name="school_name" /></div>
+          <div class="field"><label>Responsável</label><input name="guardian_name" /></div>
+          <div class="field" style="grid-column:1 / -1;"><label>E-mail do responsável</label><input name="guardian_email" type="email" /></div>
+        </div>
+        <div class="form-actions"><span class="muted">Os dados são persistidos no banco institucional.</span><button class="btn success" type="submit">Salvar</button></div>
+      </form>
+    </div>
+  </div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, statusBadge } from '/js/app.js';
+
+    let students = [];
+    let historyCache = new Map();
+    let selectedStudentId = '';
+    let searchTerm = '';
+    const modal = document.getElementById('modalBackdrop');
+    const form = document.getElementById('studentForm');
+    const modalTitle = document.getElementById('modalTitle');
+
+    function openModal(student = null) {
+      modal.classList.add('visible');
+      form.reset();
+      form.querySelector('[name="id"]').value = student?.id || '';
+      modalTitle.textContent = student ? 'Editar estudante' : 'Novo estudante';
+      for (const key of ['full_name', 'grade_level', 'class_name', 'birth_date', 'school_name', 'guardian_name', 'guardian_email']) {
+        form[key].value = student?.[key] || '';
+      }
+    }
+    function closeModal() { modal.classList.remove('visible'); }
+
+    function getFilteredStudents() {
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return students;
+      return students.filter((student) =>
+        [student.full_name, student.grade_level, student.class_name, student.guardian_name, student.guardian_email]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term))
+      );
+    }
+
+    async function loadHistory(studentId) {
+      if (!studentId) return [];
+      if (!historyCache.has(studentId)) {
+        const data = await getJson(`/students/${studentId}/history`);
+        historyCache.set(studentId, data);
+      }
+      return historyCache.get(studentId) || [];
+    }
+
+    async function selectStudent(studentId) {
+      selectedStudentId = studentId;
+      const student = students.find((item) => item.id === studentId);
+      const historyTarget = document.getElementById('historyPanel');
+      if (!historyTarget) return;
+      if (!student) {
+        historyTarget.innerHTML = '<div class="empty-state">Selecione um estudante para ver o histórico.</div>';
+        return;
+      }
+      historyTarget.innerHTML = '<div class="empty-state">Carregando histórico do estudante...</div>';
+      const history = await loadHistory(studentId);
+      historyTarget.innerHTML = `
+        <div class="toolbar">
+          <div>
+            <h2 style="margin:0;">${escapeHtml(student.full_name)}</h2>
+            <div class="muted">${escapeHtml(student.grade_level || 'Sem série')} • ${escapeHtml(student.class_name || 'Sem turma')}</div>
+          </div>
+          <button class="btn" type="button" id="editSelectedStudent">Editar cadastro</button>
+        </div>
+        <div class="history-list" style="margin-top:16px;">
+          ${history.length ? history.map((item) => `
+            <div class="history-item">
+              <strong>${escapeHtml(item.cycle_title || 'Ciclo aberto')}</strong>
+              <div class="history-meta">
+                <span>${statusBadge(item.status)}</span>
+                <span>Score geral: <strong>${item.overall_score ?? '--'}</strong></span>
+                <span>Atualizado: ${escapeHtml(item.updated_at || item.created_at || '-')}</span>
+              </div>
+              <div class="history-meta">
+                <span>Cognitivo ${item.cognitive_score ?? '--'}</span>
+                <span>Organização ${item.organization_score ?? '--'}</span>
+                <span>Relacional ${item.relational_score ?? '--'}</span>
+                <span>Emocional ${item.emotional_score ?? '--'}</span>
+              </div>
+              <div class="table-actions" style="margin-top:12px;">
+                <a class="btn" href="/resultado.html?id=${item.id}">Abrir resultado</a>
+              </div>
+            </div>
+          `).join('') : '<div class="empty-state">Este estudante ainda não possui diagnósticos registrados.</div>'}
+        </div>
+      `;
+      document.getElementById('editSelectedStudent')?.addEventListener('click', () => openModal(student));
+    }
+
+    async function render() {
+      const me = await requireAuth();
+      installShell({ title: 'Gestão de estudantes', userName: me.full_name, user: me });
+      setShellContent(`
+        <section class="page-section">
+          <div class="grid-2">
+            <div class="card">
+              <div class="toolbar">
+                <div><h2 style="margin:0;">Base de estudantes</h2><div class="muted">Cadastro, edição e consulta institucional.</div></div>
+                <div class="actions"><input class="search-input" id="studentSearch" placeholder="Buscar por nome, turma ou responsável" /><button class="btn primary" id="newStudentBtn">+ Novo estudante</button></div>
+              </div>
+              <div class="table-wrap" style="margin-top:16px;">
+                <table>
+                  <thead><tr><th>Nome</th><th>Série</th><th>Turma</th><th>Responsável</th><th>Ações</th></tr></thead>
+                  <tbody id="studentsBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card drawer-card">
+              <div class="toolbar"><div><h2 style="margin:0;">Histórico por estudante</h2><div class="muted">Selecione um cadastro para abrir a linha do tempo dos diagnósticos.</div></div></div>
+              <div id="historyPanel" style="margin-top:16px;"><div class="empty-state">Selecione um estudante para ver o histórico.</div></div>
+            </div>
+          </div>
+        </section>
+      `);
+
+      document.getElementById('newStudentBtn').addEventListener('click', () => openModal());
+      document.getElementById('studentSearch').value = searchTerm;
+      document.getElementById('studentSearch').addEventListener('input', async (event) => {
+        searchTerm = event.target.value;
+        await render();
+        if (selectedStudentId) await selectStudent(selectedStudentId);
+      });
+
+      const filtered = getFilteredStudents();
+      document.getElementById('studentsBody').innerHTML = filtered.length ? filtered.map((student) => `
+        <tr>
+          <td><strong>${escapeHtml(student.full_name)}</strong><div class="muted">${escapeHtml(student.guardian_email || '-')}</div></td>
+          <td>${escapeHtml(student.grade_level || '-')}</td>
+          <td>${escapeHtml(student.class_name || '-')}</td>
+          <td>${escapeHtml(student.guardian_name || '-')}</td>
+          <td><div class="table-actions"><button class="btn" data-view="${student.id}">Histórico</button><button class="btn" data-edit="${student.id}">Editar</button></div></td>
+        </tr>
+      `).join('') : '<tr><td colspan="5"><div class="empty-state">Nenhum estudante cadastrado ainda.</div></td></tr>';
+
+      document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => {
+        const student = students.find((item) => item.id === button.dataset.edit);
+        openModal(student);
+      }));
+
+      document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', async () => {
+        await selectStudent(button.dataset.view);
+      }));
+
+      if (selectedStudentId) await selectStudent(selectedStudentId);
+    }
+
+    async function load() {
+      setLoadingState(true, 'Buscando estudantes...');
+      students = await getJson('/students');
+      await render();
+      setLoadingState(false);
+    }
+
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const id = payload.id;
+      delete payload.id;
+      setLoadingState(true, id ? 'Atualizando estudante...' : 'Criando estudante...');
+      try {
+        const saved = await getJson(id ? `/students/${id}` : '/students', {
+          method: id ? 'PATCH' : 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (id) historyCache.delete(id);
+        selectedStudentId = saved.id;
+        showToast(id ? 'Estudante atualizado.' : 'Estudante criado.');
+        closeModal();
+        await load();
+      } catch (error) {
+        setLoadingState(false);
+        showToast(error.message, 'error');
+      }
+    });
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${error.message}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

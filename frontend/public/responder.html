@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Responder avaliação</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="playful-public">
+  <main class="container responder-shell" id="mount"></main>
+  <script type="module">
+    import { setLoadingState, showToast, escapeHtml, formatDimensionLabel } from '/js/app.js';
+    const mount = document.getElementById('mount');
+    const token = new URLSearchParams(window.location.search).get('token') || '';
+
+    async function request(url, options = {}) {
+      const response = await fetch(`/api${url}`, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Falha ao carregar formulário.');
+      return data;
+    }
+
+    function iconFor(type) {
+      return ({ student:'🧒', teacher:'👩‍🏫', guardian:'👨‍👩‍👧', institutional:'🏫' })[type] || '✨';
+    }
+
+    function render(payload) {
+      const { respondent, questions } = payload;
+      mount.innerHTML = `
+        <section class="hero-public card whimsical-card">
+          <div class="eyebrow">${iconFor(respondent.respondent_type)} Convite de avaliação</div>
+          <h1>Olá, ${escapeHtml(respondent.respondent_name || 'respondente')}!</h1>
+          <p class="lead">Sua visão ajuda a construir um diagnóstico mais justo, humano e completo para <strong>${escapeHtml(respondent.student_name)}</strong>.</p>
+          <div class="grid-3 compact-metrics" style="margin-top:18px;">
+            <div class="inline-chip"><strong>Estudante</strong><span>${escapeHtml(respondent.student_name)}</span></div>
+            <div class="inline-chip"><strong>Ciclo</strong><span>${escapeHtml(respondent.cycle_title || 'Ciclo aberto')}</span></div>
+            <div class="inline-chip"><strong>Seu papel</strong><span>${escapeHtml(formatDimensionLabel(respondent.respondent_type) || respondent.respondent_type)}</span></div>
+          </div>
+        </section>
+        <section class="card" style="margin-top:20px;">
+          <div class="toolbar"><div><h2 style="margin:0;">Avaliação ${escapeHtml(respondent.method_name || 'C.O.R.E. 360')}</h2><div class="muted">Marque de 1 a 5, onde 1 representa maior fragilidade e 5 maior consistência observada.</div></div><span class="status-badge status-${escapeHtml(respondent.status)}">${respondent.status === 'completed' ? 'Respondido' : 'Pendente'}</span></div>
+          <form id="respondentForm" style="margin-top:18px;">
+            <div class="question-groups">
+              ${['cognitive','organization','relational','emotional'].map((dimension) => {
+                const group = questions.filter((q) => q.dimension === dimension);
+                if (!group.length) return '';
+                return `<div class="question-group"><div class="section-heading"><div class="eyebrow">${escapeHtml(formatDimensionLabel(dimension))}</div><h3>${escapeHtml(formatDimensionLabel(dimension))}</h3></div>${group.map((question) => `
+                  <div class="question playful-question">
+                    <div class="question-topline"><span class="question-pill">${escapeHtml(question.pillar_label)}</span></div>
+                    <div style="margin-top:10px;">${escapeHtml(question.prompt)}</div>
+                    <div class="scale cheerful-scale">${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''}/> <span>${score}</span></label>`).join('')}</div>
+                    <textarea name="comment_${question.id}" placeholder="Comentário opcional para enriquecer a leitura..."></textarea>
+                  </div>`).join('')}</div>`;
+              }).join('')}
+            </div>
+            <div class="form-actions sticky-actions">
+              <span class="muted">Leva cerca de 3 a 5 minutos.</span>
+              <button class="btn success" type="submit">Enviar minha contribuição</button>
+            </div>
+          </form>
+        </section>`;
+
+      document.getElementById('respondentForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setLoadingState(true, 'Enviando sua contribuição...');
+        try {
+          const formData = new FormData(event.currentTarget);
+          const answers = questions.map((question) => ({
+            question_id: question.id,
+            score: Number(formData.get(`question_${question.id}`) || 3),
+            comment: formData.get(`comment_${question.id}`) || ''
+          }));
+          await request(`/public/respondent/${token}/responses`, { method: 'POST', body: JSON.stringify({ answers }) });
+          showToast('Resposta enviada com sucesso. Obrigado!');
+          mount.innerHTML = `<section class="card success-panel"><div class="hero-badge">🎉 Obrigado!</div><h1>Contribuição recebida</h1><p class="lead">Sua resposta já foi registrada no LoopinEdu e agora faz parte do diagnóstico 360º do estudante.</p></section>`;
+          setLoadingState(false);
+        } catch (error) {
+          setLoadingState(false);
+          showToast(error.message, 'error');
+        }
+      });
+    }
+
+    async function load() {
+      if (!token) {
+        mount.innerHTML = '<section class="card"><h2>Link inválido</h2><p class="muted">O token de acesso não foi encontrado.</p></section>';
+        return;
+      }
+      setLoadingState(true, 'Preparando formulário de resposta...');
+      try {
+        const payload = await request(`/public/respondent/${token}`);
+        render(payload);
+      } catch (error) {
+        mount.innerHTML = `<section class="card"><h2>Não foi possível abrir o formulário</h2><p class="muted">${escapeHtml(error.message)}</p></section>`;
+      } finally {
+        setLoadingState(false);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

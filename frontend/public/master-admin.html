@@ -1,0 +1,212 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Master Admin</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, buildMiniBarChart } from '/js/app.js';
+
+    async function load() {
+      setLoadingState(true, 'Abrindo painel central da plataforma...');
+      const me = await requireAuth();
+      if (!me.is_platform_admin) throw new Error('Acesso restrito ao Master Admin.');
+      installShell({ title: 'Master Admin SaaS', userName: me.full_name, user: me });
+      const data = await getJson('/master-admin/overview');
+      const summary = data.summary || {};
+      const tenants = data.tenants || [];
+      const planRows = Object.entries((data.subscriptions || []).reduce((acc, row) => {
+        const key = `${row.plan_key}__${row.status}`;
+        acc[key] = Number(row.total || 0);
+        return acc;
+      }, {}));
+
+      setShellContent(`
+        <section class="page-section premium-page">
+          <div class="premium-hero card gradient-premium">
+            <div>
+              <div class="badge badge-premium">Central SaaS</div>
+              <h1>Controle tenants, trials, planos e bloqueios num painel central</h1>
+              <p class="muted">Visão operacional da plataforma para governar escolas, crescimento e monetização sem sair do LoopinEdu.</p>
+            </div>
+            <div class="premium-hero-stats">
+              <div class="inline-stat"><div class="muted">Tenants</div><strong>${Number(summary.total_tenants || 0)}</strong></div>
+              <div class="inline-stat"><div class="muted">Premium</div><strong>${Number(summary.premium_tenants || 0)}</strong></div>
+            </div>
+          </div>
+
+          <div class="grid-4">
+            <article class="card metric-card"><span class="metric-icon">🏫</span><div class="metric-label">Total de tenants</div><div class="metric-value">${Number(summary.total_tenants || 0)}</div></article>
+            <article class="card metric-card"><span class="metric-icon">🟢</span><div class="metric-label">Ativos</div><div class="metric-value">${Number(summary.active_tenants || 0)}</div></article>
+            <article class="card metric-card"><span class="metric-icon">⛔</span><div class="metric-label">Bloqueados</div><div class="metric-value">${Number(summary.blocked_tenants || 0)}</div></article>
+            <article class="card metric-card"><span class="metric-icon">🎯</span><div class="metric-label">Leads capturados</div><div class="metric-value">${Number(summary.total_leads || 0)}</div></article>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h2 style="margin-top:0;">Distribuição por plano/status</h2>
+              ${buildMiniBarChart(planRows.map(([label, value]) => ({ label: label.replace('__', ' · '), value })), { maxValue: Math.max(1, ...planRows.map(([,v]) => Number(v||0))) })}
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Novo platform admin</h2><div class="muted">Crie operadores centrais para suporte e operação.</div></div><button class="btn secondary" id="newPlatformAdminBtn">Criar agora</button></div>
+              <div class="muted" style="margin-top:16px;">Use esta área para distribuir acesso global à operação do SaaS.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="toolbar"><div><h2 style="margin:0;">Tenants da plataforma</h2><div class="muted">Acompanhe uso, plano, trial e ações rápidas.</div></div></div>
+            <div class="table-wrap" style="margin-top:16px;">
+              <table>
+                <thead><tr><th>Escola</th><th>Plano</th><th>Status</th><th>Trial</th><th>Uso</th><th>Ações</th></tr></thead>
+                <tbody>
+                  ${tenants.map((tenant) => `
+                    <tr>
+                      <td>
+                        <strong>${escapeHtml(tenant.name)}</strong>
+                        <div class="muted">${escapeHtml(tenant.slug || '')}</div>
+                      </td>
+                      <td><span class="tiny-pill">${escapeHtml(String(tenant.plan).toUpperCase())}</span></td>
+                      <td><span class="status-badge status-${escapeHtml(tenant.status)}">${escapeHtml(tenant.status)}</span><div class="muted">${escapeHtml(tenant.subscription_status || '')}</div></td>
+                      <td>${tenant.trial_ends_at ? new Date(tenant.trial_ends_at).toLocaleDateString('pt-BR') : '—'}</td>
+                      <td><div class="muted">${Number(tenant.total_students || 0)} estudantes · ${Number(tenant.total_assessments || 0)} diagnósticos · ${Number(tenant.total_users || 0)} usuários</div></td>
+                      <td>
+                        <div class="table-actions compact-actions">
+                          <button class="btn ghost" data-action="open" data-id="${tenant.id}">Abrir</button>
+                          <button class="btn ghost" data-action="toggle" data-id="${tenant.id}" data-blocked="${tenant.status === 'blocked' ? '1' : '0'}">${tenant.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}</button>
+                          <button class="btn ghost" data-action="trial" data-id="${tenant.id}">Resetar trial</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <dialog id="tenantDialog" class="modal-dialog"></dialog>
+          <dialog id="platformAdminDialog" class="modal-dialog"></dialog>
+        </section>
+      `);
+
+      async function openTenant(id) {
+        setLoadingState(true, 'Abrindo tenant...');
+        try {
+          const detail = await getJson(`/master-admin/tenants/${id}`);
+          const tenant = detail.tenant || {};
+          const dialog = document.getElementById('tenantDialog');
+          dialog.innerHTML = `
+            <form method="dialog" class="card" style="min-width:min(720px, 92vw);">
+              <div class="toolbar"><h3 style="margin:0;">${escapeHtml(tenant.name || 'Tenant')}</h3><button class="link-btn">Fechar</button></div>
+              <div class="form-grid" style="margin-top:16px;">
+                <label>Nome<input id="mtName" value="${escapeHtml(tenant.name || '')}" /></label>
+                <label>Slug<input id="mtSlug" value="${escapeHtml(tenant.slug || '')}" /></label>
+                <label>Plano<select id="mtPlan"><option value="trial">Trial</option><option value="essencial">Essencial</option><option value="pro">Pro</option><option value="premium">Premium</option></select></label>
+                <label>Status<select id="mtStatus"><option value="active">Ativo</option><option value="blocked">Bloqueado</option></select></label>
+                <label>E-mail billing<input id="mtBilling" value="${escapeHtml(tenant.billing_email || '')}" /></label>
+                <label>Subscription<select id="mtSubscription"><option value="trial">trial</option><option value="pending">pending</option><option value="active">active</option><option value="overdue">overdue</option><option value="canceled">canceled</option></select></label>
+                <label>Trial até<input id="mtTrial" type="date" value="${tenant.trial_ends_at ? new Date(tenant.trial_ends_at).toISOString().slice(0,10) : ''}" /></label>
+                <label>Cor principal<input id="mtPrimary" type="color" value="${escapeHtml(tenant.primary_color || '#1f8560')}" /></label>
+                <label>Cor secundária<input id="mtSecondary" type="color" value="${escapeHtml(tenant.secondary_color || '#1f3c88')}" /></label>
+                <label>Cor destaque<input id="mtAccent" type="color" value="${escapeHtml(tenant.accent_color || '#42c6c6')}" /></label>
+              </div>
+              <div class="grid-2" style="margin-top:18px; gap:16px;">
+                <div class="card tight"><div class="muted">Uso</div><strong>${Number(detail.usage?.total_students || 0)} estudantes</strong><div class="muted">${Number(detail.usage?.total_assessments || 0)} diagnósticos · ${Number(detail.usage?.total_respondents || 0)} respondentes</div></div>
+                <div class="card tight"><div class="muted">Usuários</div>${(detail.users || []).map((u) => `<div class="list-row"><strong>${escapeHtml(u.full_name)}</strong><span class="tiny-pill">${escapeHtml(u.role)}</span></div>`).join('') || '<div class="empty-state">Sem usuários.</div>'}</div>
+              </div>
+              <div class="table-actions" style="margin-top:16px;"><button type="button" class="btn primary" id="saveTenantBtn">Salvar tenant</button></div>
+            </form>`;
+          dialog.showModal();
+          dialog.querySelector('#mtPlan').value = tenant.plan || 'trial';
+          dialog.querySelector('#mtStatus').value = tenant.status || 'active';
+          dialog.querySelector('#mtSubscription').value = tenant.subscription_status || 'trial';
+          dialog.querySelector('#saveTenantBtn').addEventListener('click', async () => {
+            setLoadingState(true, 'Salvando tenant...');
+            try {
+              await getJson(`/master-admin/tenants/${id}`, { method: 'PATCH', body: JSON.stringify({
+                name: dialog.querySelector('#mtName').value,
+                slug: dialog.querySelector('#mtSlug').value,
+                plan: dialog.querySelector('#mtPlan').value,
+                status: dialog.querySelector('#mtStatus').value,
+                billing_email: dialog.querySelector('#mtBilling').value,
+                subscription_status: dialog.querySelector('#mtSubscription').value,
+                trial_ends_at: dialog.querySelector('#mtTrial').value || null,
+                primary_color: dialog.querySelector('#mtPrimary').value,
+                secondary_color: dialog.querySelector('#mtSecondary').value,
+                accent_color: dialog.querySelector('#mtAccent').value
+              })});
+              dialog.close();
+              showToast('Tenant atualizado com sucesso.');
+              await load();
+            } catch (error) { showToast(error.message, 'error'); }
+            finally { setLoadingState(false); }
+          });
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      }
+
+      async function createPlatformAdmin() {
+        const dialog = document.getElementById('platformAdminDialog');
+        dialog.innerHTML = `
+          <form method="dialog" class="card" style="min-width:min(560px, 92vw);">
+            <div class="toolbar"><h3 style="margin:0;">Novo platform admin</h3><button class="link-btn">Fechar</button></div>
+            <div class="form-grid" style="margin-top:16px;">
+              <label>Nome completo<input id="paName" /></label>
+              <label>E-mail<input id="paEmail" type="email" /></label>
+              <label>Senha<input id="paPassword" value="123456" /></label>
+              <label>Tenant base<select id="paTenant">${tenants.map((tenant) => `<option value="${tenant.id}">${escapeHtml(tenant.name)}</option>`).join('')}</select></label>
+            </div>
+            <div class="table-actions" style="margin-top:16px;"><button type="button" class="btn primary" id="savePlatformAdminBtn">Criar operator</button></div>
+          </form>`;
+        dialog.showModal();
+        dialog.querySelector('#savePlatformAdminBtn').addEventListener('click', async () => {
+          setLoadingState(true, 'Criando platform admin...');
+          try {
+            await getJson('/master-admin/platform-admins', { method: 'POST', body: JSON.stringify({
+              full_name: dialog.querySelector('#paName').value,
+              email: dialog.querySelector('#paEmail').value,
+              password: dialog.querySelector('#paPassword').value,
+              tenant_id: dialog.querySelector('#paTenant').value
+            })});
+            dialog.close();
+            showToast('Platform admin criado com sucesso.');
+            await load();
+          } catch (error) { showToast(error.message, 'error'); }
+          finally { setLoadingState(false); }
+        });
+      }
+
+      document.querySelectorAll('[data-action="open"]').forEach((btn) => btn.addEventListener('click', () => openTenant(btn.dataset.id)));
+      document.querySelectorAll('[data-action="toggle"]').forEach((btn) => btn.addEventListener('click', async () => {
+        setLoadingState(true, 'Atualizando status do tenant...');
+        try {
+          await getJson(`/master-admin/tenants/${btn.dataset.id}/block`, { method: 'POST', body: JSON.stringify({ blocked: btn.dataset.blocked !== '1' }) });
+          showToast('Status do tenant atualizado.');
+          await load();
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      }));
+      document.querySelectorAll('[data-action="trial"]').forEach((btn) => btn.addEventListener('click', async () => {
+        setLoadingState(true, 'Resetando trial...');
+        try {
+          await getJson(`/master-admin/tenants/${btn.dataset.id}/reset-trial`, { method: 'POST', body: JSON.stringify({ days: 15 }) });
+          showToast('Trial resetado com sucesso.');
+          await load();
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      }));
+      document.getElementById('newPlatformAdminBtn')?.addEventListener('click', createPlatformAdmin);
+      setLoadingState(false);
+    }
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${escapeHtml(error.message)}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

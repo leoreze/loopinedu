@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Diagnóstico</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+
+  <main class="form-shell container" id="diagnosticoMount"></main>
+
+  <script type="module">
+    import { getJson, formatDimensionLabel, requireAuth, installShell, setLoadingState, showToast, setShellContent, escapeHtml } from '/js/app.js';
+
+    const mount = document.getElementById('diagnosticoMount');
+    let currentStep = 1;
+    let questions = [];
+    let cycles = [];
+
+    function renderLayout(user) {
+      const userName = user?.full_name || user?.full_name || 'Usuário';
+      installShell({ title: 'Fluxo guiado de diagnóstico', userName, user });
+      setShellContent(`
+        <div class="step-indicator">
+          <div class="step-chip active" data-step-chip="1">1. Estudante</div>
+          <div class="step-chip" data-step-chip="2">2. Contexto</div>
+          <div class="step-chip" data-step-chip="3">3. Respostas</div>
+          <div class="step-chip" data-step-chip="4">4. Finalização</div>
+        </div>
+        <div class="card">
+          <form id="diagnosticForm">
+            <section data-step="1">
+              <h2>Dados do estudante</h2>
+              <div class="grid-2">
+                <div class="field"><label>Nome completo</label><input name="full_name" required /></div>
+                <div class="field"><label>Série / ano</label><input name="grade_level" placeholder="Ex: 7º ano" /></div>
+                <div class="field"><label>Turma</label><input name="class_name" placeholder="Ex: Turma B" /></div>
+                <div class="field"><label>Escola</label><input name="school_name" /></div>
+                <div class="field"><label>Responsável</label><input name="guardian_name" /></div>
+                <div class="field"><label>E-mail do responsável</label><input name="guardian_email" type="email" /></div>
+              </div>
+            </section>
+            <section data-step="2" hidden>
+              <h2>Contexto de avaliação</h2>
+              <div class="grid-2">
+                <div class="field"><label>Ciclo</label><select name="cycle_id" id="cycleSelect"><option value="">Sem ciclo</option></select></div>
+                <div class="field"><label>Método</label><input name="method_name" value="C.O.R.E. 360" /></div>
+              </div>
+              <div class="field"><label>Notas do diagnóstico</label><textarea name="notes" placeholder="Ex: Oscilação em prazos, ansiedade em avaliações..."></textarea></div>
+              <div class="card surface-soft" style="margin-top:16px;">
+                <div class="toolbar"><div><h3 style="margin:0;">Quem vai participar da avaliação 360º?</h3><div class="muted">Cadastre os convites já nesta etapa. O sistema cria os links individuais automaticamente.</div></div></div>
+                <div class="grid-2" style="margin-top:16px;">
+                  <div class="field"><label>Professor(a)</label><input name="teacher_name" placeholder="Nome do professor responsável" /></div>
+                  <div class="field"><label>E-mail do professor(a)</label><input name="teacher_email" type="email" /></div>
+                  <div class="field"><label>Responsável (nome)</label><input name="guardian_respondent_name" placeholder="Pai, mãe ou responsável" /></div>
+                  <div class="field"><label>E-mail do responsável</label><input name="guardian_respondent_email" type="email" /></div>
+                  <div class="field"><label>Respondente institucional</label><input name="institutional_name" value="Coordenação pedagógica" /></div>
+                  <div class="field"><label>E-mail institucional</label><input name="institutional_email" type="email" /></div>
+                </div>
+              </div>
+            </section>
+            <section data-step="3" hidden>
+              <h2>Respostas-base (respondente institucional)</h2>
+              <div id="questionsContainer"></div>
+            </section>
+            <section data-step="4" hidden>
+              <h2>Finalizar e gerar leitura</h2>
+              <p class="muted">Ao concluir, o sistema cria estudante, avaliação, convites dos respondentes, salva a resposta institucional inicial, deixa os links prontos para aluno, professor e responsável e redireciona para o resultado.</p>
+              <div class="card" style="background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.22);">
+                <strong>Fluxo automático:</strong>
+                <div class="muted" style="margin-top:10px;">Cadastro → convites 360º → resposta institucional → coleta externa → scoring → IA → resultado</div>
+              </div>
+            </section>
+            <div class="form-actions">
+              <button type="button" id="prevBtn" class="btn">Voltar</button>
+              <button type="button" id="nextBtn" class="btn primary">Próximo</button>
+            </div>
+          </form>
+        </div>
+      `);
+    }
+
+    function renderStep() {
+      const steps = [...document.querySelectorAll('[data-step]')];
+      const chips = [...document.querySelectorAll('[data-step-chip]')];
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      steps.forEach((section) => section.hidden = Number(section.dataset.step) !== currentStep);
+      chips.forEach((chip) => chip.classList.toggle('active', Number(chip.dataset.stepChip) === currentStep));
+      prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
+      nextBtn.textContent = currentStep === 4 ? 'Concluir diagnóstico' : 'Próximo';
+      nextBtn.className = currentStep === 4 ? 'btn success' : 'btn primary';
+    }
+
+    function renderQuestions() {
+      document.getElementById('questionsContainer').innerHTML = questions.map((question) => `
+        <div class="question">
+          <div><strong>${formatDimensionLabel(question.dimension)}</strong> • ${escapeHtml(question.pillar_label)}</div>
+          <div style="margin-top:8px;">${escapeHtml(question.prompt)}</div>
+          <div class="scale">
+            ${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''} /> ${score}</label>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function fillCycleSelect() {
+      const select = document.getElementById('cycleSelect');
+      if (!select) return;
+      select.innerHTML = '<option value="">Sem ciclo</option>' + cycles.map((cycle) => `<option value="${cycle.id}">${escapeHtml(cycle.title)}</option>`).join('');
+    }
+
+    async function bootstrap() {
+      setLoadingState(true, 'Preparando fluxo guiado...');
+      const me = await requireAuth();
+      renderLayout(me);
+      [questions, cycles] = await Promise.all([getJson('/meta/questions'), getJson('/cycles')]);
+      fillCycleSelect();
+      renderQuestions();
+      renderStep();
+      bindEvents();
+      setLoadingState(false);
+    }
+
+    function bindEvents() {
+      const form = document.getElementById('diagnosticForm');
+      document.getElementById('prevBtn').addEventListener('click', () => {
+        if (currentStep > 1) currentStep -= 1;
+        renderStep();
+      });
+
+      document.getElementById('nextBtn').addEventListener('click', async () => {
+        if (currentStep < 4) {
+          currentStep += 1;
+          renderStep();
+          return;
+        }
+
+        const nextBtn = document.getElementById('nextBtn');
+        nextBtn.disabled = true;
+        setLoadingState(true, 'Criando diagnóstico, calculando score e processando IA...');
+
+        try {
+          const formData = new FormData(form);
+          const student = await getJson('/students', {
+            method: 'POST',
+            body: JSON.stringify({
+              full_name: formData.get('full_name'),
+              grade_level: formData.get('grade_level'),
+              class_name: formData.get('class_name'),
+              school_name: formData.get('school_name'),
+              guardian_name: formData.get('guardian_name'),
+              guardian_email: formData.get('guardian_email')
+            })
+          });
+
+          const assessment = await getJson('/assessments', {
+            method: 'POST',
+            body: JSON.stringify({
+              student_id: student.id,
+              cycle_id: formData.get('cycle_id') || null,
+              method_name: formData.get('method_name') || 'C.O.R.E. 360',
+              notes: formData.get('notes')
+            })
+          });
+
+          const respondentsPayload = [
+                {
+                  respondent_type: 'institutional',
+                  respondent_name: formData.get('institutional_name') || 'Coordenação / Aplicação inicial',
+                  respondent_email: formData.get('institutional_email') || ''
+                },
+                {
+                  respondent_type: 'teacher',
+                  respondent_name: formData.get('teacher_name') || '',
+                  respondent_email: formData.get('teacher_email') || ''
+                },
+                {
+                  respondent_type: 'guardian',
+                  respondent_name: formData.get('guardian_respondent_name') || formData.get('guardian_name') || '',
+                  respondent_email: formData.get('guardian_respondent_email') || formData.get('guardian_email') || ''
+                },
+                {
+                  respondent_type: 'student',
+                  respondent_name: formData.get('full_name') || '',
+                  respondent_email: ''
+                }
+              ].filter((item) => item.respondent_name || item.respondent_email || item.respondent_type === 'institutional' || item.respondent_type === 'student');
+
+          const respondents = await getJson(`/assessments/${assessment.id}/respondents`, {
+            method: 'POST',
+            body: JSON.stringify({ respondents: respondentsPayload })
+          });
+
+          await getJson(`/assessments/respondents/${respondents[0].id}/responses`, {
+            method: 'POST',
+            body: JSON.stringify({
+              answers: questions.map((question) => ({
+                question_id: question.id,
+                score: Number(formData.get(`question_${question.id}`) || 3),
+                comment: ''
+              }))
+            })
+          });
+
+          await getJson(`/assessments/${assessment.id}/complete`, { method: 'POST' });
+          showToast('Diagnóstico concluído com sucesso.');
+          window.location.href = `/resultado.html?id=${assessment.id}`;
+        } catch (error) {
+          nextBtn.disabled = false;
+          setLoadingState(false);
+          showToast(error.message, 'error');
+        }
+      });
+    }
+
+    bootstrap().catch((error) => {
+      setLoadingState(false);
+      mount.innerHTML = `<div class="card"><h2>Falha ao carregar</h2><p class="muted">${escapeHtml(error.message)}</p></div>`;
+    });
+  </script>
+</body>
+</html>

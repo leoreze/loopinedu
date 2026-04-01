@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Ciclos</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="card modal">
+      <div class="toolbar"><h2 id="modalTitle" style="margin:0;">Novo ciclo</h2><button class="btn" type="button" id="closeModal">Fechar</button></div>
+      <form id="cycleForm" style="margin-top:16px;">
+        <input type="hidden" name="id" />
+        <div class="grid-2">
+          <div class="field"><label>Título</label><input name="title" required /></div>
+          <div class="field"><label>Escola</label><input name="school_name" /></div>
+          <div class="field"><label>Início</label><input type="date" name="start_date" /></div>
+          <div class="field"><label>Fim</label><input type="date" name="end_date" /></div>
+          <div class="field"><label>Status</label><select name="status"><option value="draft">Draft</option><option value="active">Active</option><option value="closed">Closed</option></select></div>
+        </div>
+        <div class="form-actions"><span class="muted">Organize diagnósticos por bimestre, semestre ou ciclo customizado.</span><button class="btn success" type="submit">Salvar ciclo</button></div>
+      </form>
+    </div>
+  </div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, statusBadge } from '/js/app.js';
+
+    let cycles = [];
+    const modal = document.getElementById('modalBackdrop');
+    const form = document.getElementById('cycleForm');
+    const modalTitle = document.getElementById('modalTitle');
+
+    function openModal(cycle = null) {
+      modal.classList.add('visible');
+      form.reset();
+      form.querySelector('[name="id"]').value = cycle?.id || '';
+      modalTitle.textContent = cycle ? 'Editar ciclo' : 'Novo ciclo';
+      ['title','school_name','start_date','end_date','status'].forEach((key) => {
+        form[key].value = cycle?.[key] || (key === 'status' ? 'draft' : '');
+      });
+    }
+    function closeModal() { modal.classList.remove('visible'); }
+
+    async function render() {
+      const me = await requireAuth();
+      installShell({ title: 'Ciclos diagnósticos', userName: me.full_name, user: me });
+      setShellContent(`
+        <section class="page-section">
+          <div class="card">
+            <div class="toolbar"><div><h2 style="margin:0;">Ciclos</h2><div class="muted">Controle operacional de períodos diagnósticos.</div></div><div class="actions"><button class="btn primary" id="newCycleBtn">+ Novo ciclo</button></div></div>
+            <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>Título</th><th>Escola</th><th>Período</th><th>Status</th><th>Diagnósticos</th><th>Concluídos</th><th>Ações</th></tr></thead><tbody id="cyclesBody"></tbody></table></div>
+          </div>
+        </section>
+      `);
+      document.getElementById('newCycleBtn').addEventListener('click', () => openModal());
+      document.getElementById('cyclesBody').innerHTML = cycles.length ? cycles.map((cycle) => `
+        <tr>
+          <td><strong>${escapeHtml(cycle.title)}</strong></td>
+          <td>${escapeHtml(cycle.school_name || '-')}</td>
+          <td>${escapeHtml(cycle.start_date || '-')} → ${escapeHtml(cycle.end_date || '-')}</td>
+          <td>${statusBadge(cycle.status)}</td>
+          <td>${cycle.assessments_count}</td>
+          <td>${cycle.completed_count}</td>
+          <td><button class="btn" data-edit="${cycle.id}">Editar</button></td>
+        </tr>
+      `).join('') : '<tr><td colspan="7"><div class="empty-state">Nenhum ciclo registrado.</div></td></tr>';
+      document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => openModal(cycles.find((item) => item.id === button.dataset.edit))));
+    }
+
+    async function load() {
+      setLoadingState(true, 'Buscando ciclos...');
+      cycles = await getJson('/cycles');
+      await render();
+      setLoadingState(false);
+    }
+
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const id = payload.id;
+      delete payload.id;
+      setLoadingState(true, id ? 'Atualizando ciclo...' : 'Criando ciclo...');
+      try {
+        await getJson(id ? `/cycles/${id}` : '/cycles', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+        showToast(id ? 'Ciclo atualizado.' : 'Ciclo criado.');
+        closeModal();
+        await load();
+      } catch (error) {
+        setLoadingState(false);
+        showToast(error.message, 'error');
+      }
+    });
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${error.message}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

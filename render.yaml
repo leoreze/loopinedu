@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: loopinedu
+    runtime: node
+    rootDir: backend
+    plan: starter
+    buildCommand: npm install
+    preDeployCommand: npm run db:setup && npm run db:seed
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: APP_NAME
+        value: LoopinEdu
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: TRIAL_DAYS
+        value: 15
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEFAULT_ADMIN_NAME
+        value: Administrador
+      - key: DEFAULT_ADMIN_EMAIL
+        value: admin@loopinedu.com
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEFAULT_TENANT_NAME
+        value: Escola Demo LoopinEdu
+      - key: DEFAULT_TENANT_SLUG
+        value: demo-loopinedu
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADOPAGO_PUBLIC_KEY
+        sync: false
+      - key: MERCADOPAGO_WEBHOOK_SECRET
+        sync: false
+      - key: MERCADOPAGO_STATEMENT_DESCRIPTOR
+        value: LOOPINEDU
+      - key: MERCADOPAGO_INTEGRATOR_ID
+        sync: false

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Billing Premium</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast } from '/js/app.js';
+
+    function currency(value) {
+      return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    let pollingTimer = null;
+    let currentMe = null;
+
+    function planBadge(plan) {
+      const tone = plan === 'premium' ? 'badge-premium' : (plan === 'pro' ? 'badge-info' : 'badge');
+      return `<span class="badge ${tone}">${escapeHtml(String(plan || 'trial').toUpperCase())}</span>`;
+    }
+
+    function paymentStageLabel(stage) {
+      return ({
+        approved: 'Plano liberado',
+        awaiting_payment: 'Aguardando pagamento',
+        trial: 'Trial ativo',
+        idle: 'Sem cobrança pendente'
+      })[stage] || 'Status em análise';
+    }
+
+    function paymentStatusTone(status) {
+      if (['paid', 'approved', 'active'].includes(status)) return 'success';
+      if (['failed', 'canceled', 'refunded'].includes(status)) return 'danger';
+      return 'warning';
+    }
+
+    function statusChip(status) {
+      const tone = paymentStatusTone(status);
+      const label = ({ paid:'Pago', approved:'Aprovado', pending:'Pendente', failed:'Falhou', canceled:'Cancelado', refunded:'Reembolsado', active:'Ativo', trial:'Trial' })[status] || status || '—';
+      return `<span class="status-pill ${tone}">${escapeHtml(label)}</span>`;
+    }
+
+    async function syncReturnIfNeeded() {
+      const params = new URLSearchParams(window.location.search);
+      const paymentId = params.get('payment_id');
+      const externalReference = params.get('external_reference');
+      const subscriptionId = params.get('subscription_id');
+      if (!paymentId || !subscriptionId) return null;
+      try {
+        const result = await getJson('/billing/sync-payment', {
+          method: 'POST',
+          body: JSON.stringify({ payment_id: paymentId, external_reference: externalReference, subscription_id: subscriptionId })
+        });
+        showToast(result.success ? 'Pagamento confirmado. Plano ativado.' : `Pagamento retornou como ${result.payment_status || 'pendente'}.`, result.success ? 'success' : 'warning');
+        ['payment_id','external_reference','collection_id','collection_status','payment_type','merchant_order_id','preference_id','site_id','processing_mode','merchant_account_id'].forEach((key) => params.delete(key));
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({}, '', newUrl);
+        return result;
+      } catch (error) {
+        showToast(error.message, 'error');
+        return null;
+      }
+    }
+
+    function renderFeatureRows(featureList = []) {
+      return featureList.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.label)}</td>
+          <td>${item.enabled ? '<span class="status-pill success">Liberado</span>' : '<span class="status-pill danger">Bloqueado</span>'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function buildSummaryUI(summary, plans, live) {
+      const active = summary.active_subscription;
+      const pending = summary.pending_subscription;
+      const tenant = summary.tenant || {};
+      const checkoutUrl = pending?.checkout_url || live?.pending_subscription?.checkout_url || '';
+      const liveStatus = live?.payment_status || summary.transactions?.[0]?.status || tenant.subscription_status || 'trial';
+      const liveStage = live?.stage || (active ? 'approved' : pending ? 'awaiting_payment' : 'trial');
+      const leadPlan = plans.find((plan) => plan.key === 'premium') || plans[0];
+      return `
+        <section class="page-section billing-commercial-shell">
+          <div class="billing-hero card hero-with-orbs reveal-up">
+            <div class="billing-hero-grid">
+              <div>
+                <div class="eyebrow">💳 Billing premium</div>
+                <h1 style="margin:0 0 12px;">Ative o LoopinEdu com um checkout mais comercial, claro e pronto para conversão.</h1>
+                <p class="muted">Escolha o plano, abra o checkout do Mercado Pago com <strong>Pix</strong>, <strong>crédito</strong> ou <strong>débito</strong> e acompanhe a confirmação em tempo real sem sair do ambiente.</p>
+                <div class="hero-actions compact-actions">
+                  <button class="btn primary large" id="choosePremiumBtn">Quero o Plano Premium</button>
+                  ${checkoutUrl ? `<a class="btn ghost large" href="${escapeHtml(checkoutUrl)}" target="_blank" rel="noopener">Abrir checkout atual</a>` : '<a class="btn ghost large" href="#planosSection">Comparar planos</a>'}
+                </div>
+                <div class="billing-kpis">
+                  <div class="billing-kpi"><span>Plano atual</span><strong>${escapeHtml(String(tenant.plan || 'trial').toUpperCase())}</strong></div>
+                  <div class="billing-kpi"><span>Status comercial</span><strong>${escapeHtml(paymentStageLabel(liveStage))}</strong></div>
+                  <div class="billing-kpi"><span>Trial</span><strong>${tenant.trial_ends_at ? new Date(tenant.trial_ends_at).toLocaleDateString('pt-BR') : 'Ativo'}</strong></div>
+                </div>
+              </div>
+              <div class="billing-live-card pulse-soft">
+                <div class="toolbar" style="margin-bottom:12px;">
+                  <div>
+                    <div class="muted">Status em tempo real</div>
+                    <strong id="liveStageText">${escapeHtml(paymentStageLabel(liveStage))}</strong>
+                  </div>
+                  <div id="liveStatusChip">${statusChip(liveStatus)}</div>
+                </div>
+                <div class="timeline-steps compact" id="paymentTimeline">
+                  <div class="timeline-step ${pending || active ? 'done' : 'active'}"><span>1</span><div><strong>Escolha do plano</strong><small>Defina o pacote ideal para a escola.</small></div></div>
+                  <div class="timeline-step ${pending || active ? 'done' : ''}"><span>2</span><div><strong>Checkout Mercado Pago</strong><small>Pix, crédito e débito com preferência segura.</small></div></div>
+                  <div class="timeline-step ${active ? 'done active' : (pending ? 'active' : '')}"><span>3</span><div><strong>Confirmação</strong><small>O ambiente atualiza assim que o pagamento for aprovado.</small></div></div>
+                </div>
+                <div class="realtime-panel" id="realtimePanel">
+                  <div class="muted">Mensagem operacional</div>
+                  <strong id="realtimeMessage">${escapeHtml(live?.message || 'Preparando status do checkout.')}</strong>
+                  <div class="muted" id="realtimeHint" style="margin-top:8px;">${pending ? 'Deixe esta tela aberta: ela será atualizada automaticamente.' : 'Quando houver uma cobrança ativa, esta área acompanhará a confirmação.'}</div>
+                </div>
+                ${pending ? `<div class="card tight billing-code-card"><div class="muted">Referência da cobrança</div><strong>${escapeHtml(pending.external_reference || '')}</strong><div class="inline-code" style="margin-top:8px;">${escapeHtml(pending.qr_code_text || '')}</div></div>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">Resumo do ambiente</h2><div class="muted">Tudo que a coordenação precisa para regularizar, renovar ou evoluir o plano.</div></div>${planBadge(tenant.plan)}</div>
+              <div class="inline-stat-grid" style="margin-top:16px;">
+                <div class="inline-stat"><div class="muted">Plano atual</div><strong>${escapeHtml(String(tenant.plan || 'trial').toUpperCase())}</strong></div>
+                <div class="inline-stat"><div class="muted">Status</div><strong>${escapeHtml(tenant.subscription_status || 'trial')}</strong></div>
+                <div class="inline-stat"><div class="muted">Billing e-mail</div><strong>${escapeHtml(tenant.billing_email || currentMe.email || 'Não informado')}</strong></div>
+                <div class="inline-stat"><div class="muted">Gateway ativo</div><strong>${summary.payment_provider === 'mercadopago' ? 'Mercado Pago' : 'Homologação interna'}</strong></div>
+              </div>
+              <div class="table-actions" style="margin-top:16px; gap:10px; flex-wrap:wrap;">
+                ${active ? '<button class="btn danger" id="cancelBtn">Cancelar assinatura</button>' : ''}
+                ${pending && checkoutUrl ? `<a class="btn success" href="${escapeHtml(checkoutUrl)}" target="_blank" rel="noopener">Pagar agora</a>` : ''}
+                ${pending && summary.payment_provider !== 'mercadopago' ? `<button class="btn success" id="confirmBtn" data-subscription="${pending.id}">Confirmar pagamento</button>` : ''}
+                <button class="btn ghost" id="refreshLiveBtn">Atualizar status</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="toolbar"><div><h2 style="margin:0;">O que sua escola libera ao evoluir</h2><div class="muted">Use essa visão para comercializar o upgrade internamente com a direção.</div></div></div>
+              <div class="billing-upgrade-box">
+                <div>
+                  <div class="muted">Plano sugerido</div>
+                  <strong>${escapeHtml(leadPlan.name)}</strong>
+                  <p class="muted" style="margin:8px 0 0;">${escapeHtml(leadPlan.description || '')}</p>
+                </div>
+                <div class="price-value" style="margin:0;">${currency(leadPlan.price_monthly)}<small>/mês</small></div>
+              </div>
+              <ul class="list-clean muted" style="margin-top:14px;">${(leadPlan.feature_list || []).map((item) => `<li>${item.enabled ? '✔' : '—'} ${escapeHtml(item.label)}</li>`).join('')}</ul>
+            </div>
+          </div>
+
+          <div class="card" id="planosSection">
+            <div class="toolbar"><div><h2 style="margin:0;">Escolha o melhor plano para o momento da escola</h2><div class="muted">Checkout unificado, ativação simples e posicionamento comercial mais claro.</div></div></div>
+            <div class="grid-3 pricing-grid-landing" style="margin-top:18px;">
+              ${plans.filter((plan) => plan.key !== 'trial').map((plan) => `
+                <div class="card tight price-card ${plan.key === 'premium' ? 'featured' : ''}">
+                  <div class="price-chip ${plan.key === 'premium' ? 'badge-glow' : ''}">${escapeHtml(plan.name)}</div>
+                  <div class="muted" style="margin-top:10px;">${escapeHtml(plan.highlight || '')}</div>
+                  <div class="price-value">${currency(plan.price_monthly)}<small>/mês</small></div>
+                  <p class="muted">${escapeHtml(plan.description || '')}</p>
+                  <div class="muted billing-methods"><span class="badge">Pix</span><span class="badge">Crédito</span><span class="badge">Débito</span></div>
+                  <ul class="list-clean muted">${(plan.feature_list || []).map((item) => `<li>${item.enabled ? '✔' : '—'} ${escapeHtml(item.label)}</li>`).join('')}</ul>
+                  <button class="btn ${plan.key === 'premium' ? 'primary' : 'ghost'} subscribe-btn" data-plan="${plan.key}" style="width:100%; margin-top:12px;">Escolher ${escapeHtml(plan.name)}</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card pricing-compare">
+              <h2 style="margin-top:0;">Comparativo comercial rápido</h2>
+              <div class="table-wrap"><table><thead><tr><th>Recurso</th>${plans.filter((p) => p.key !== 'trial').map((p) => `<th>${escapeHtml(p.name)}</th>`).join('')}</tr></thead><tbody>
+                <tr><td>Pix, crédito e débito</td>${plans.filter((p) => p.key !== 'trial').map(() => '<td>✔</td>').join('')}</tr>
+                <tr><td>Dashboard premium</td>${plans.filter((p) => p.key !== 'trial').map((p) => `<td>${p.features?.dashboard_advanced ? '✔' : '—'}</td>`).join('')}</tr>
+                <tr><td>Relatório institucional</td>${plans.filter((p) => p.key !== 'trial').map((p) => `<td>${p.features?.premium_reports ? '✔' : '—'}</td>`).join('')}</tr>
+                <tr><td>Workspace Premium</td>${plans.filter((p) => p.key !== 'trial').map((p) => `<td>${p.features?.premium_workspace ? '✔' : '—'}</td>`).join('')}</tr>
+                <tr><td>Devolutiva para família</td>${plans.filter((p) => p.key !== 'trial').map((p) => `<td>${p.features?.family_report ? '✔' : '—'}</td>`).join('')}</tr>
+              </tbody></table></div>
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Recursos liberados no seu plano</h2>
+              <div class="table-wrap"><table><thead><tr><th>Recurso</th><th>Status</th></tr></thead><tbody>${renderFeatureRows(tenant.feature_list || [])}</tbody></table></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h2 style="margin-top:0;">Assinaturas</h2>
+              <div class="table-wrap"><table><thead><tr><th>Plano</th><th>Status</th><th>Início</th><th>Fim</th></tr></thead><tbody>${summary.subscriptions.length ? summary.subscriptions.map((item) => `<tr><td>${escapeHtml(item.plan_key)}</td><td>${statusChip(item.status)}</td><td>${item.starts_at ? new Date(item.starts_at).toLocaleDateString('pt-BR') : '—'}</td><td>${item.ends_at ? new Date(item.ends_at).toLocaleDateString('pt-BR') : '—'}</td></tr>`).join('') : '<tr><td colspan="4">Nenhuma assinatura registrada.</td></tr>'}</tbody></table></div>
+            </div>
+            <div class="card">
+              <h2 style="margin-top:0;">Transações</h2>
+              <div class="table-wrap"><table><thead><tr><th>Status</th><th>Valor</th><th>Referência</th><th>Criado em</th></tr></thead><tbody>${summary.transactions.length ? summary.transactions.map((item) => `<tr><td>${statusChip(item.status)}</td><td>${currency((Number(item.amount_cents || 0) / 100))}</td><td>${escapeHtml(item.provider_reference || '—')}</td><td>${new Date(item.created_at).toLocaleString('pt-BR')}</td></tr>`).join('') : '<tr><td colspan="4">Nenhuma transação registrada.</td></tr>'}</tbody></table></div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    async function fetchAll() {
+      const [summary, plans, live] = await Promise.all([
+        getJson('/billing/summary'),
+        getJson('/billing/plans'),
+        getJson('/billing/live-status')
+      ]);
+      return { summary, plans, live };
+    }
+
+    async function renderPage() {
+      const { summary, plans, live } = await fetchAll();
+      setShellContent(buildSummaryUI(summary, plans, live));
+      bindEvents(summary, plans);
+      startLivePolling();
+    }
+
+    function bindEvents(summary, plans) {
+      document.getElementById('choosePremiumBtn')?.addEventListener('click', () => {
+        document.querySelector('[data-plan="premium"]')?.click();
+      });
+
+      document.querySelectorAll('.subscribe-btn').forEach((btn) => btn.addEventListener('click', async () => {
+        setLoadingState(true, 'Gerando checkout premium...');
+        try {
+          const created = await getJson('/billing/subscribe', { method: 'POST', body: JSON.stringify({ plan_key: btn.dataset.plan, billing_email: currentMe.email }) });
+          showToast(created.checkout?.init_point ? 'Checkout aberto com sucesso.' : 'Cobrança criada com sucesso.');
+          if (created.checkout?.init_point) window.open(created.checkout.init_point, '_blank', 'noopener');
+          await renderPage();
+        } catch (error) {
+          showToast(error.message, 'error');
+        } finally { setLoadingState(false); }
+      }));
+
+      document.getElementById('confirmBtn')?.addEventListener('click', async (event) => {
+        setLoadingState(true, 'Confirmando pagamento...');
+        try {
+          await getJson('/billing/confirm-payment', { method: 'POST', body: JSON.stringify({ subscription_id: event.currentTarget.dataset.subscription }) });
+          showToast('Plano ativado com sucesso.');
+          await renderPage();
+        } catch (error) {
+          showToast(error.message, 'error');
+        } finally { setLoadingState(false); }
+      });
+
+      document.getElementById('cancelBtn')?.addEventListener('click', async () => {
+        setLoadingState(true, 'Cancelando assinatura...');
+        try {
+          await getJson('/billing/cancel', { method: 'POST' });
+          showToast('Assinatura cancelada.');
+          await renderPage();
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      });
+
+      document.getElementById('refreshLiveBtn')?.addEventListener('click', async () => {
+        setLoadingState(true, 'Atualizando status em tempo real...');
+        try {
+          await refreshLiveStatus();
+          showToast('Status atualizado.');
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setLoadingState(false); }
+      });
+    }
+
+    async function refreshLiveStatus() {
+      const live = await getJson('/billing/live-status');
+      const chip = document.getElementById('liveStatusChip');
+      const stage = document.getElementById('liveStageText');
+      const message = document.getElementById('realtimeMessage');
+      const hint = document.getElementById('realtimeHint');
+      if (chip) chip.innerHTML = statusChip(live.payment_status);
+      if (stage) stage.textContent = paymentStageLabel(live.stage);
+      if (message) message.textContent = live.message || 'Status atualizado.';
+      if (hint) hint.textContent = live.waiting_confirmation ? 'Ainda aguardando a confirmação do gateway. Esta tela continuará atualizando automaticamente.' : 'Sem pendências no momento. Quando um pagamento for aprovado, o plano será liberado aqui.';
+      if (live.stage === 'approved') {
+        showToast('Pagamento identificado. Plano ativo.', 'success');
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+        await renderPage();
+      }
+      return live;
+    }
+
+    function startLivePolling() {
+      clearInterval(pollingTimer);
+      pollingTimer = setInterval(async () => {
+        try { await refreshLiveStatus(); } catch { /* silêncio */ }
+      }, 8000);
+    }
+
+    async function load() {
+      setLoadingState(true, 'Abrindo billing premium...');
+      currentMe = await requireAuth();
+      installShell({ title: 'Billing e assinatura', userName: currentMe.full_name, user: currentMe });
+      await syncReturnIfNeeded();
+      await renderPage();
+      setLoadingState(false);
+    }
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${escapeHtml(error.message)}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

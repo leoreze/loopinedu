@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Resultado</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+
+  <script type="module">
+    import { getJson, formatDimensionLabel, requireAuth, installShell, setShellContent, setLoadingState, escapeHtml, showToast, getToken } from '/js/app.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const assessmentId = params.get('id');
+
+    function renderList(items) {
+      return (items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('') || '<li>Sem dados</li>';
+    }
+
+    async function loadReport() {
+      setLoadingState(true, 'Abrindo diagnóstico consolidado...');
+      const me = await requireAuth();
+      installShell({ title: 'Resultado consolidado', userName: me.full_name, user: me });
+
+      if (!assessmentId) {
+        setShellContent(`<section class="page-section"><div class="card"><h2>Nenhum diagnóstico informado</h2><p class="muted">Use /resultado.html?id=UUID para abrir um registro real.</p></div></section>`);
+        setLoadingState(false);
+        return;
+      }
+
+      const report = await getJson(`/reports/${assessmentId}`);
+      let comparison = null;
+      if (me.features?.respondent_comparison) { try { comparison = await getJson(`/assessments/${assessmentId}/comparison`); } catch {} }
+      let premiumReportsEnabled = true;
+      try {
+        await getJson(`/billing/summary`);
+      } catch {}
+      const reportHtmlHref = `/api/reports/${assessmentId}/html?token=${encodeURIComponent(getToken())}`;
+      const reportPdfHref = `/api/reports/${assessmentId}/pdf?token=${encodeURIComponent(getToken())}`;
+      const reportPdfDownloadHref = `/api/reports/${assessmentId}/pdf?download=1&token=${encodeURIComponent(getToken())}`;
+      setShellContent(`
+        <section class="page-section">
+          <section class="result-hero">
+            <div class="grid-2">
+              <div class="card">
+                <div class="muted">Resultado consolidado</div>
+                <h1 style="margin:8px 0 8px;">${escapeHtml(report.student_name)}</h1>
+                <div class="muted">${escapeHtml(report.school_name || 'Escola não informada')} • ${escapeHtml(report.cycle_title || 'Ciclo aberto')} • status ${escapeHtml(report.status)}</div>
+                <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
+                  ${me.features?.reports_premium ? `<a id="reportLink" class="btn" href="${reportHtmlHref}" target="_blank">Abrir relatório premium</a><a class="btn secondary" href="${reportPdfHref}" target="_blank">Visualizar PDF institucional</a><a class="btn subtle" href="${reportPdfDownloadHref}" target="_blank">Baixar PDF</a>` : `<a class="btn" href="/billing.html">Desbloquear relatório premium</a>`}
+                  ${me.features?.family_report ? `<a class="btn" href="/api/reports/${assessmentId}/family?token=${encodeURIComponent(getToken())}" target="_blank">Devolutiva para família</a>` : ''}
+                  <button id="reportGenerateBtn" class="btn success" type="button">Registrar exportação</button>
+                </div>
+              </div>
+              <div class="card" style="display:grid; place-items:center;">
+                <div class="score-ring">
+                  <div class="score-ring-inner">
+                    <div>
+                      <div class="muted">Score Geral</div>
+                      <div style="font-size:2rem; font-weight:800; margin-top:6px;">${report.overall_score ?? '--'}</div>
+                      <div class="muted" style="margin-top:6px;">${escapeHtml(report.overall_band || '--')}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="section"><div class="grid-4">${[
+            ['cognitive', report.cognitive_score],
+            ['organization', report.organization_score],
+            ['relational', report.relational_score],
+            ['emotional', report.emotional_score]
+          ].map(([key, value]) => `<div class="card"><div class="muted">${formatDimensionLabel(key)}</div><div class="kpi">${value ?? '--'}</div></div>`).join('')}</div></section>
+          <section class="section"><div class="grid-2"><div class="card"><h2>Resumo executivo</h2><p class="muted">${escapeHtml(report.ai_summary || 'Sem resumo gerado.')}</p></div><div class="card"><h2>Plano de ação</h2><ul class="list-clean muted">${renderList(report.action_plan)}</ul></div></div></section>
+          <section class="section"><div class="grid-2"><div class="card"><h2>Pontos fortes</h2><ul class="list-clean muted">${renderList(report.strengths)}</ul></div><div class="card"><h2>Riscos</h2><ul class="list-clean muted">${renderList(report.risks)}</ul></div></div></section>
+          ${comparison ? `<section class="section"><div class="card"><h2>Comparativo entre respondentes</h2><div class="table-wrap"><table><thead><tr><th>Perfil</th><th>Dimensão</th><th>Média</th></tr></thead><tbody>${(comparison.by_dimension||[]).map((item)=>`<tr><td>${escapeHtml(item.respondent_type)}</td><td>${escapeHtml(formatDimensionLabel(item.dimension))}</td><td>${item.average_score}</td></tr>`).join('')}</tbody></table></div></div></section>` : ''}
+        </section>
+      `);
+
+      document.getElementById('reportGenerateBtn').addEventListener('click', async () => {
+        setLoadingState(true, 'Registrando exportação premium...');
+        try {
+          const generated = await getJson(`/reports/${assessmentId}/generate`, { method: 'POST' });
+          showToast(`Exportação registrada: ${generated.export.id}`);
+        } catch (error) {
+          if (error.code === 'FEATURE_BLOCKED') {
+            showToast('Relatório premium disponível nos planos Pro e Premium.', 'error');
+            window.location.href = '/billing.html';
+            return;
+          }
+          showToast(error.message, 'error');
+        } finally {
+          setLoadingState(false);
+        }
+      });
+
+      setLoadingState(false);
+    }
+
+    loadReport().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${escapeHtml(error.message)}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

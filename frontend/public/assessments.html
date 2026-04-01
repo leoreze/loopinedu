@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Diagnósticos</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="appShell"></div>
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="card modal">
+      <div class="toolbar"><h2 id="modalTitle" style="margin:0;">Novo diagnóstico</h2><button class="btn" type="button" id="closeModal">Fechar</button></div>
+      <form id="assessmentForm" style="margin-top:16px;">
+        <input type="hidden" name="id" />
+        <div class="grid-2">
+          <div class="field"><label>Estudante</label><select name="student_id" id="studentSelect" required></select></div>
+          <div class="field"><label>Ciclo</label><select name="cycle_id" id="cycleSelect"><option value="">Sem ciclo</option></select></div>
+          <div class="field"><label>Método</label><input name="method_name" value="C.O.R.E. 360" /></div>
+          <div class="field"><label>Status</label><select name="status" id="statusSelect"><option value="draft">Rascunho</option><option value="collecting">Coletando</option><option value="scoring">Calculando</option><option value="processing_ai">Processando IA</option><option value="completed">Concluído</option><option value="error">Erro</option></select></div>
+          <div class="field" style="grid-column:1 / -1;"><label>Notas</label><textarea name="notes"></textarea></div>
+        </div>
+        <div class="form-actions"><span class="muted">A coleta de respostas pode ser feita na tela de diagnóstico multi-step.</span><button class="btn success" type="submit">Salvar diagnóstico</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="respondentsBackdrop">
+    <div class="card modal modal-wide">
+      <div class="toolbar"><h2 id="respondentsTitle" style="margin:0;">Respondentes do diagnóstico</h2><button class="btn" type="button" id="closeRespondentsModal">Fechar</button></div>
+      <div class="grid-2" style="margin-top:16px; align-items:start;">
+        <div class="card surface-soft">
+          <h3 style="margin-top:0;">Adicionar respondente</h3>
+          <form id="respondentForm">
+            <div class="grid-2">
+              <div class="field"><label>Tipo</label><select name="respondent_type"><option value="student">Aluno</option><option value="teacher">Professor</option><option value="guardian">Responsável</option><option value="institutional">Institucional</option></select></div>
+              <div class="field"><label>Nome</label><input name="respondent_name" required /></div>
+              <div class="field" style="grid-column:1 / -1;"><label>E-mail</label><input name="respondent_email" type="email" placeholder="opcional para envio" /></div>
+            </div>
+            <div class="form-actions"><span class="muted">Cada pessoa recebe um link único e seguro.</span><button class="btn success" type="submit">Adicionar respondente</button></div>
+          </form>
+        </div>
+        <div class="card surface-soft">
+          <h3 style="margin-top:0;">Fluxo completo da avaliação 360º</h3>
+          <div class="flow-steps playful-flow">
+            <div class="flow-step"><span>1</span><strong>Crie o diagnóstico</strong><small>Escolha estudante, ciclo e contexto.</small></div>
+            <div class="flow-step"><span>2</span><strong>Convide todos</strong><small>Aluno, professor, responsável e institucional.</small></div>
+            <div class="flow-step"><span>3</span><strong>Colete as respostas</strong><small>Cada link abre um formulário lúdico e independente.</small></div>
+            <div class="flow-step"><span>4</span><strong>Consolide o resultado</strong><small>O sistema calcula score, IA e relatório final.</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="card surface-soft" style="margin-top:16px;">
+        <div class="toolbar"><div><h3 style="margin:0;">Links e andamento</h3><div class="muted">Compartilhe os convites por e-mail, WhatsApp ou canais internos.</div></div></div>
+        <div id="respondentsList" style="margin-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, statusBadge, copyToClipboard } from '/js/app.js';
+
+    let students = [];
+    let cycles = [];
+    let assessments = [];
+    let filterStatus = 'all';
+    let activeAssessmentId = '';
+    let activeRespondents = [];
+    const modal = document.getElementById('modalBackdrop');
+    const form = document.getElementById('assessmentForm');
+    const modalTitle = document.getElementById('modalTitle');
+
+    function openModal(assessment = null) {
+      modal.classList.add('visible');
+      form.reset();
+      fillSelects();
+      form.querySelector('[name="id"]').value = assessment?.id || '';
+      modalTitle.textContent = assessment ? 'Editar diagnóstico' : 'Novo diagnóstico';
+      form.student_id.value = assessment?.student_id || students[0]?.id || '';
+      form.cycle_id.value = assessment?.cycle_id || '';
+      form.method_name.value = assessment?.method_name || 'C.O.R.E. 360';
+      form.status.value = assessment?.status || 'draft';
+      form.notes.value = assessment?.notes || '';
+      form.student_id.disabled = Boolean(assessment);
+      document.getElementById('statusSelect').disabled = !assessment;
+    }
+    function closeModal() { modal.classList.remove('visible'); }
+
+    function fillSelects() {
+      document.getElementById('studentSelect').innerHTML = students.map((student) => `<option value="${student.id}">${escapeHtml(student.full_name)}</option>`).join('');
+      document.getElementById('cycleSelect').innerHTML = '<option value="">Sem ciclo</option>' + cycles.map((cycle) => `<option value="${cycle.id}">${escapeHtml(cycle.title)}</option>`).join('');
+    }
+
+    function filteredAssessments() {
+      return assessments.filter((item) => filterStatus === 'all' ? true : item.status === filterStatus);
+    }
+
+    const respondentsModal = document.getElementById('respondentsBackdrop');
+    const respondentForm = document.getElementById('respondentForm');
+
+    function labelRespondentType(type) {
+      return ({ student:'Aluno', teacher:'Professor', guardian:'Responsável', institutional:'Institucional' })[type] || type;
+    }
+
+    async function openRespondentsModal(assessmentId) {
+      activeAssessmentId = assessmentId;
+      respondentsModal.classList.add('visible');
+      const assessment = assessments.find((item) => item.id === assessmentId);
+      document.getElementById('respondentsTitle').textContent = `Respondentes • ${assessment?.student_name || 'Diagnóstico'}`;
+      await refreshRespondents();
+    }
+
+    function closeRespondentsModal() {
+      respondentsModal.classList.remove('visible');
+      respondentForm.reset();
+      activeAssessmentId = '';
+      activeRespondents = [];
+    }
+
+    async function refreshRespondents() {
+      if (!activeAssessmentId) return;
+      const data = await getJson(`/assessments/${activeAssessmentId}/respondents`);
+      activeRespondents = data;
+      const list = document.getElementById('respondentsList');
+      list.innerHTML = data.length ? `<div class="invite-grid">${data.map((item) => `
+        <div class="invite-card">
+          <div class="invite-head"><div><strong>${escapeHtml(item.respondent_name || labelRespondentType(item.respondent_type))}</strong><div class="muted">${escapeHtml(labelRespondentType(item.respondent_type))}</div></div>${statusBadge(item.status)}</div>
+          <div class="invite-link">${escapeHtml(window.location.origin + item.respond_url)}</div>
+          <div class="table-actions" style="margin-top:12px;"><button class="btn" type="button" data-copy-link="${window.location.origin + item.respond_url}">Copiar link</button><a class="btn" href="${item.respond_url}" target="_blank">Abrir formulário</a></div>
+        </div>`).join('')}</div>` : '<div class="empty-state">Nenhum respondente adicionado ainda.</div>';
+      list.querySelectorAll('[data-copy-link]').forEach((button) => button.addEventListener('click', () => copyToClipboard(button.dataset.copyLink)));
+    }
+
+    async function render() {
+      const me = await requireAuth();
+      installShell({ title: 'Diagnósticos e avaliações', userName: me.full_name, user: me });
+      setShellContent(`
+        <section class="page-section">
+          <div class="card">
+            <div class="toolbar">
+              <div><h2 style="margin:0;">Diagnósticos</h2><div class="muted">Visão consolidada das avaliações criadas.</div></div>
+              <div class="actions"><div class="segmented" id="statusFilter"><button data-filter="all" class="${filterStatus === 'all' ? 'active' : ''}">Todos</button><button data-filter="draft" class="${filterStatus === 'draft' ? 'active' : ''}">Rascunho</button><button data-filter="collecting" class="${filterStatus === 'collecting' ? 'active' : ''}">Coletando</button><button data-filter="completed" class="${filterStatus === 'completed' ? 'active' : ''}">Concluídos</button></div><a href="/diagnostico.html" class="btn">Abrir fluxo guiado</a><button class="btn primary" id="newAssessmentBtn">+ Novo diagnóstico</button></div>
+            </div>
+            <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>Estudante</th><th>Ciclo</th><th>Score</th><th>Respondentes</th><th>Status</th><th>Atualizado</th><th>Ações</th></tr></thead><tbody id="assessmentsBody"></tbody></table></div>
+          </div>
+        </section>
+      `);
+      document.getElementById('newAssessmentBtn').addEventListener('click', () => openModal());
+      document.querySelectorAll('#statusFilter [data-filter]').forEach((button) => button.addEventListener('click', async () => { filterStatus = button.dataset.filter; await render(); }));
+      document.getElementById('assessmentsBody').innerHTML = filteredAssessments().length ? filteredAssessments().map((item) => `
+        <tr>
+          <td><strong>${escapeHtml(item.student_name)}</strong><div class="muted">${escapeHtml(item.method_name || 'C.O.R.E. 360')}</div></td>
+          <td>${escapeHtml(item.cycle_title || 'Sem ciclo')}</td>
+          <td>${item.overall_score ?? '--'}</td>
+          <td>${Number(item.respondents_completed || 0)}/${Number(item.respondents_total || 0)}</td>
+          <td>${statusBadge(item.status)}</td>
+          <td>${escapeHtml(item.updated_at || item.created_at || '')}</td>
+          <td><div class="table-actions"><button class="btn" data-respondents="${item.id}">Respondentes</button><a class="btn" href="/resultado.html?id=${item.id}">Resultado</a><button class="btn" data-edit="${item.id}">Editar</button>${item.status !== 'completed' ? `<button class="btn success" data-complete="${item.id}">Concluir</button>` : ''}</div></td>
+        </tr>
+      `).join('') : '<tr><td colspan="7"><div class="empty-state">Nenhum diagnóstico cadastrado.</div></td></tr>';
+
+      document.querySelectorAll('[data-complete]').forEach((button) => button.addEventListener('click', async () => {
+        setLoadingState(true, 'Consolidando scoring e IA...');
+        try {
+          await getJson(`/assessments/${button.dataset.complete}/complete`, { method: 'POST' });
+          showToast('Diagnóstico concluído.');
+          await load();
+        } catch (error) {
+          setLoadingState(false);
+          showToast(error.message, 'error');
+        }
+      }));
+
+      document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => {
+        const assessment = assessments.find((item) => item.id === button.dataset.edit);
+        openModal(assessment);
+      }));
+      document.querySelectorAll('[data-respondents]').forEach((button) => button.addEventListener('click', () => openRespondentsModal(button.dataset.respondents)));
+    }
+
+    async function load() {
+      setLoadingState(true, 'Carregando diagnósticos...');
+      [students, cycles, assessments] = await Promise.all([getJson('/students'), getJson('/cycles'), getJson('/assessments')]);
+      await render();
+      fillSelects();
+      setLoadingState(false);
+    }
+
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    document.getElementById('closeRespondentsModal').addEventListener('click', closeRespondentsModal);
+    respondentsModal.addEventListener('click', (event) => { if (event.target === respondentsModal) closeRespondentsModal(); });
+    respondentForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!activeAssessmentId) return;
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+      setLoadingState(true, 'Adicionando respondente...');
+      try {
+        await getJson(`/assessments/${activeAssessmentId}/respondents`, { method: 'POST', body: JSON.stringify({ respondents: [payload] }) });
+        event.currentTarget.reset();
+        await refreshRespondents();
+        await load();
+        showToast('Respondente adicionado com link exclusivo.');
+      } catch (error) {
+        setLoadingState(false);
+        showToast(error.message, 'error');
+      } finally {
+        setLoadingState(false);
+      }
+    });
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
+    document.getElementById('assessmentForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const id = payload.id;
+      delete payload.id;
+      if (!id) delete payload.status;
+      setLoadingState(true, id ? 'Atualizando diagnóstico...' : 'Criando diagnóstico...');
+      try {
+        await getJson(id ? `/assessments/${id}` : '/assessments', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+        showToast(id ? 'Diagnóstico atualizado.' : 'Diagnóstico criado.');
+        closeModal();
+        event.currentTarget.reset();
+        await load();
+      } catch (error) {
+        setLoadingState(false);
+        showToast(error.message, 'error');
+      }
+    });
+
+    load().catch((error) => {
+      setLoadingState(false);
+      document.body.innerHTML = `<div class="login-shell"><div class="card login-card"><h2>Falha ao carregar</h2><p class="muted">${error.message}</p></div></div>`;
+    });
+  </script>
+</body>
+</html>

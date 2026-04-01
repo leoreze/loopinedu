@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu — Criar escola</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="playful-public">
+  <main class="login-shell">
+    <div class="signup-flow-grid">
+      <div class="card login-card signup-card reveal-up">
+        <div class="auth-brand-wrap"><img class="auth-brand-logo" src="/assets/brand/logo-loopinedu-light.svg" alt="LoopinEdu" /></div>
+        <div class="badge">Onboarding SaaS</div>
+        <h1 style="margin-top:0;">Crie sua escola e comece o trial em minutos</h1>
+        <p class="muted">Ative um ambiente novo com trial de 15 dias, admin principal e ciclo inicial prontos. Depois, regularize pelo billing com checkout Mercado Pago.</p>
+        <form id="signupForm">
+          <div class="field"><label>Nome da escola</label><input name="school_name" required /></div>
+          <div class="field"><label>Nome do administrador</label><input name="admin_name" required /></div>
+          <div class="field"><label>E-mail</label><input type="email" name="email" required /></div>
+          <div class="field"><label>Senha</label><input type="password" name="password" minlength="6" required /></div>
+          <button class="btn primary" type="submit" style="width:100%;">Criar ambiente</button>
+        </form>
+        <p class="muted" style="margin-top:18px;">Já possui conta? <a href="/login.html">Entrar agora</a></p>
+      </div>
+      <div class="card onboarding-commercial-card reveal-up delay-2">
+        <div class="eyebrow">✨ Jornada comercial</div>
+        <h2 style="margin-top:0;">Como a ativação funciona</h2>
+        <div class="timeline-steps">
+          <div class="timeline-step done"><span>1</span><div><strong>Cadastro da escola</strong><small>Crie o tenant e o admin principal.</small></div></div>
+          <div class="timeline-step active"><span>2</span><div><strong>Trial imediato</strong><small>Explore o LoopinEdu sem fricção por 15 dias.</small></div></div>
+          <div class="timeline-step"><span>3</span><div><strong>Upgrade comercial</strong><small>Pix, crédito ou débito para manter o ambiente ativo.</small></div></div>
+        </div>
+        <div class="inline-stat-grid" style="margin-top:18px;">
+          <div class="inline-stat"><div class="muted">Métodos</div><strong>Pix + Cartão</strong></div>
+          <div class="inline-stat"><div class="muted">Tempo médio</div><strong>3 minutos</strong></div>
+          <div class="inline-stat"><div class="muted">Onboarding</div><strong>Guiado</strong></div>
+          <div class="inline-stat"><div class="muted">Pronto para diretoria</div><strong>Sim</strong></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { signup, showToast, setLoadingState, getToken } from '/js/app.js';
+
+    if (getToken()) window.location.href = '/dashboard.html';
+
+    document.getElementById('signupForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(formData.entries());
+      setLoadingState(true, 'Criando ambiente e ativando trial...');
+      try {
+        const created = await signup(payload);
+        showToast('Ambiente criado com sucesso.');
+        window.location.href = created.restricted ? '/billing.html' : '/dashboard.html';
+      } catch (error) {
+        showToast(error.message, 'error');
+      } finally {
+        setLoadingState(false);
+      }
+    });
+  </script>
+</body>
+</html>

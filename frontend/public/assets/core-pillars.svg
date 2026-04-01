@@ -1,0 +1,41 @@
+<svg width="640" height="520" viewBox="0 0 640 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="520" rx="36" fill="url(#bg)"/>
+  <circle cx="320" cy="260" r="98" fill="white" fill-opacity="0.94"/>
+  <circle cx="320" cy="260" r="74" fill="#F7F9FF"/>
+  <text x="320" y="236" text-anchor="middle" fill="#233252" font-family="Arial, sans-serif" font-size="30" font-weight="700">C.O.R.E.</text>
+  <text x="320" y="274" text-anchor="middle" fill="#6C7A99" font-family="Arial, sans-serif" font-size="16">Método 360</text>
+  <g>
+    <circle cx="320" cy="92" r="58" fill="#E9EEFF"/>
+    <circle cx="320" cy="92" r="38" fill="#6D7CFF"/>
+    <text x="320" y="100" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700">C</text>
+    <text x="320" y="158" text-anchor="middle" fill="#42557B" font-family="Arial, sans-serif" font-size="18" font-weight="700">Cognitivo</text>
+  </g>
+  <g>
+    <circle cx="500" cy="260" r="58" fill="#DDF8F1"/>
+    <circle cx="500" cy="260" r="38" fill="#2CC7A5"/>
+    <text x="500" y="268" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700">O</text>
+    <text x="500" y="326" text-anchor="middle" fill="#42557B" font-family="Arial, sans-serif" font-size="18" font-weight="700">Organização</text>
+  </g>
+  <g>
+    <circle cx="320" cy="428" r="58" fill="#FFE8EF"/>
+    <circle cx="320" cy="428" r="38" fill="#FF7590"/>
+    <text x="320" y="436" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700">R</text>
+    <text x="320" y="494" text-anchor="middle" fill="#42557B" font-family="Arial, sans-serif" font-size="18" font-weight="700">Relacional</text>
+  </g>
+  <g>
+    <circle cx="140" cy="260" r="58" fill="#FFF0CB"/>
+    <circle cx="140" cy="260" r="38" fill="#F7B84B"/>
+    <text x="140" y="268" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700">E</text>
+    <text x="140" y="326" text-anchor="middle" fill="#42557B" font-family="Arial, sans-serif" font-size="18" font-weight="700">Emocional</text>
+  </g>
+  <path d="M320 150V184" stroke="#C8D3F8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M416 260H382" stroke="#C8D3F8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M320 336V370" stroke="#C8D3F8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M224 260H258" stroke="#C8D3F8" stroke-width="8" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bg" x1="42" y1="34" x2="590" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFF"/>
+      <stop offset="1" stop-color="#F1FBF7"/>
+    </linearGradient>
+  </defs>
+</svg>
