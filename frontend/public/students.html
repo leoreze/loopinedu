@@ -9,50 +9,118 @@
 <body>
   <div id="appShell"></div>
   <div class="modal-backdrop" id="modalBackdrop">
-    <div class="card modal">
-      <div class="toolbar"><h2 id="modalTitle" style="margin:0;">Novo estudante</h2><button class="btn" type="button" id="closeModal">Fechar</button></div>
-      <form id="studentForm" style="margin-top:16px;">
+    <div class="card modal student-modal">
+      <div class="toolbar modal-header">
+        <div class="modal-copy">
+          <h2 id="modalTitle" style="margin:0;">Novo estudante</h2>
+          <div class="muted">Cadastro premium com validação, séries e turmas já organizadas.</div>
+        </div>
+        <button class="btn" type="button" id="closeModal">Fechar</button>
+      </div>
+      <form id="studentForm" style="margin-top:20px;">
         <input type="hidden" name="id" />
         <div class="grid-2">
           <div class="field"><label>Nome completo</label><input name="full_name" required /></div>
-          <div class="field"><label>Data de nascimento</label><input name="birth_date" type="date" /></div>
-          <div class="field"><label>Série</label><input name="grade_level" /></div>
-          <div class="field"><label>Turma</label><input name="class_name" /></div>
-          <div class="field"><label>Escola</label><input name="school_name" /></div>
-          <div class="field"><label>Responsável</label><input name="guardian_name" /></div>
-          <div class="field" style="grid-column:1 / -1;"><label>E-mail do responsável</label><input name="guardian_email" type="email" /></div>
+          <div class="field"><label>Escola</label><input name="school_name" required /></div>
+          <div class="field"><label>Série</label><select name="grade_level" id="studentGradeSelect" required></select></div>
+          <div class="field"><label>Turma</label><select name="class_name" id="studentClassSelect" required></select></div>
+          <div class="field"><label>Data de nascimento</label><input name="birth_date" type="date" required /></div>
+                    <div class="field"><label>Responsável</label><input name="guardian_name" required /></div>
+          <div class="field"><label>E-mail do responsável</label><input name="guardian_email" type="email" /></div>
+          <div class="field"><label>Telefone do responsável</label><input name="guardian_phone" /></div>
+          <div class="field photo-upload">
+            <div class="student-avatar initials" id="studentPreview">AL</div>
+            <div>
+              <label for="studentPhoto">Avatar do estudante</label>
+              <input id="studentPhoto" type="file" accept="image/*" />
+              <input type="hidden" name="photo_data_url" />
+            </div>
+          </div>
         </div>
-        <div class="form-actions"><span class="muted">Os dados são persistidos no banco institucional.</span><button class="btn success" type="submit">Salvar</button></div>
+        <div class="form-actions"><span class="muted">Os campos principais são obrigatórios para manter a base consistente.</span><button class="btn primary" type="submit">Salvar estudante</button></div>
       </form>
     </div>
   </div>
-  <script type="module">
-    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, statusBadge } from '/js/app.js';
 
-    let students = [];
-    let historyCache = new Map();
-    let selectedStudentId = '';
-    let searchTerm = '';
+  <div class="modal-backdrop" id="historyModalBackdrop">
+    <div class="card modal modal-wide">
+      <div class="toolbar">
+        <div><h2 id="historyModalTitle" style="margin:0;">Histórico por estudante</h2><div class="muted">Linha do tempo individual com leitura rápida do diagnóstico.</div></div>
+        <button class="btn" type="button" id="closeHistoryModal">Fechar</button>
+      </div>
+      <div id="historyPanel" style="margin-top:16px;"><div class="empty-state">Selecione um estudante para ver o histórico.</div></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, showToast, buildStudentAvatar, getInitials, statusBadge } from '/js/app.js';
+
     const modal = document.getElementById('modalBackdrop');
     const form = document.getElementById('studentForm');
     const modalTitle = document.getElementById('modalTitle');
+    const preview = document.getElementById('studentPreview');
+    const photoInput = document.getElementById('studentPhoto');
+    const historyModal = document.getElementById('historyModalBackdrop');
+    const historyModalTitle = document.getElementById('historyModalTitle');
+    let me = null;
+    let students = [];
+    let selectedStudentId = '';
+    let searchTerm = '';
+    const historyCache = new Map();
+
+    function uniqueOptions(items, key) {
+      return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+    }
+
+    function fillSelect(selectId, values = [], placeholder) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = `<option value="">${placeholder}</option>` + values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+      if (values.includes(current)) select.value = current;
+    }
+
+    function refreshCombos() {
+      fillSelect('studentGradeSelect', uniqueOptions(students, 'grade_level'), 'Selecione a série');
+      fillSelect('studentClassSelect', uniqueOptions(students, 'class_name'), 'Selecione a turma');
+    }
+
+    function updatePreview(name = '', photo = '') {
+      preview.className = 'student-avatar';
+      preview.innerHTML = photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(name || 'Estudante')}" />` : escapeHtml(getInitials(name));
+      if (!photo) preview.classList.add('initials');
+    }
+
+    function applyFormDefaults(student = null) {
+      form.school_name.value = student?.school_name || me?.tenant_name || '';
+      form.grade_level.value = student?.grade_level || '';
+      form.class_name.value = student?.class_name || '';
+      updatePreview(student?.full_name || '', student?.photo_data_url || '');
+      form.photo_data_url.value = student?.photo_data_url || '';
+    }
 
     function openModal(student = null) {
       modal.classList.add('visible');
       form.reset();
+      refreshCombos();
       form.querySelector('[name="id"]').value = student?.id || '';
       modalTitle.textContent = student ? 'Editar estudante' : 'Novo estudante';
-      for (const key of ['full_name', 'grade_level', 'class_name', 'birth_date', 'school_name', 'guardian_name', 'guardian_email']) {
-        form[key].value = student?.[key] || '';
+      for (const key of ['full_name', 'grade_level', 'class_name', 'birth_date', 'school_name', 'guardian_name', 'guardian_email', 'guardian_phone']) {
+        if (form[key]) form[key].value = student?.[key] || '';
       }
+      applyFormDefaults(student);
     }
-    function closeModal() { modal.classList.remove('visible'); }
+
+    function closeModal() {
+      modal.classList.remove('visible');
+      form.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
+    }
 
     function getFilteredStudents() {
       const term = searchTerm.trim().toLowerCase();
       if (!term) return students;
       return students.filter((student) =>
-        [student.full_name, student.grade_level, student.class_name, student.guardian_name, student.guardian_email]
+        [student.full_name, student.grade_level, student.class_name, student.guardian_name, student.guardian_email, student.guardian_phone]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(term))
       );
@@ -67,11 +135,12 @@
       return historyCache.get(studentId) || [];
     }
 
-    async function selectStudent(studentId) {
+    async function openHistoryModal(studentId) {
       selectedStudentId = studentId;
       const student = students.find((item) => item.id === studentId);
       const historyTarget = document.getElementById('historyPanel');
-      if (!historyTarget) return;
+      historyModalTitle.textContent = student ? `Histórico • ${student.full_name}` : 'Histórico por estudante';
+      historyModal.classList.add('visible');
       if (!student) {
         historyTarget.innerHTML = '<div class="empty-state">Selecione um estudante para ver o histórico.</div>';
         return;
@@ -80,9 +149,13 @@
       const history = await loadHistory(studentId);
       historyTarget.innerHTML = `
         <div class="toolbar">
-          <div>
-            <h2 style="margin:0;">${escapeHtml(student.full_name)}</h2>
-            <div class="muted">${escapeHtml(student.grade_level || 'Sem série')} • ${escapeHtml(student.class_name || 'Sem turma')}</div>
+          <div class="student-meta">
+            ${buildStudentAvatar(student, { className: 'large-avatar' })}
+            <div>
+              <h2 style="margin:0;">${escapeHtml(student.full_name)}</h2>
+              <div class="muted">${escapeHtml(student.school_name || me?.tenant_name || 'Escola')} • ${escapeHtml(student.grade_level || 'Sem série')} • ${escapeHtml(student.class_name || 'Sem turma')}</div>
+              <div class="muted">${escapeHtml(student.guardian_name || 'Responsável não informado')} • ${escapeHtml(student.guardian_phone || '-')}</div>
+            </div>
           </div>
           <button class="btn" type="button" id="editSelectedStudent">Editar cadastro</button>
         </div>
@@ -108,30 +181,31 @@
           `).join('') : '<div class="empty-state">Este estudante ainda não possui diagnósticos registrados.</div>'}
         </div>
       `;
-      document.getElementById('editSelectedStudent')?.addEventListener('click', () => openModal(student));
+      document.getElementById('editSelectedStudent')?.addEventListener('click', () => {
+        historyModal.classList.remove('visible');
+        openModal(student);
+      });
     }
 
     async function render() {
-      const me = await requireAuth();
       installShell({ title: 'Gestão de estudantes', userName: me.full_name, user: me });
       setShellContent(`
-        <section class="page-section">
-          <div class="grid-2">
-            <div class="card">
-              <div class="toolbar">
-                <div><h2 style="margin:0;">Base de estudantes</h2><div class="muted">Cadastro, edição e consulta institucional.</div></div>
-                <div class="actions"><input class="search-input" id="studentSearch" placeholder="Buscar por nome, turma ou responsável" /><button class="btn primary" id="newStudentBtn">+ Novo estudante</button></div>
-              </div>
-              <div class="table-wrap" style="margin-top:16px;">
-                <table>
-                  <thead><tr><th>Nome</th><th>Série</th><th>Turma</th><th>Responsável</th><th>Ações</th></tr></thead>
-                  <tbody id="studentsBody"></tbody>
-                </table>
-              </div>
+        <section class="page-section students-page">
+          <div class="summary-grid">
+            <div class="summary-card"><div class="muted">Estudantes cadastrados</div><strong>${students.length}</strong></div>
+            <div class="summary-card"><div class="muted">Séries mapeadas</div><strong>${uniqueOptions(students, 'grade_level').length}</strong></div>
+            <div class="summary-card"><div class="muted">Turmas ativas</div><strong>${uniqueOptions(students, 'class_name').length}</strong></div>
+          </div>
+          <div class="card full-span-card">
+            <div class="toolbar">
+              <div><h2 style="margin:0;">Base de estudantes</h2><div class="muted">Cadastro padronizado, foto, validação e filtros rápidos.</div></div>
+              <div class="actions"><input class="search-input" id="studentSearch" placeholder="Buscar por nome, turma, responsável ou telefone" /><button class="btn primary" id="newStudentBtn">+ Novo estudante</button></div>
             </div>
-            <div class="card drawer-card">
-              <div class="toolbar"><div><h2 style="margin:0;">Histórico por estudante</h2><div class="muted">Selecione um cadastro para abrir a linha do tempo dos diagnósticos.</div></div></div>
-              <div id="historyPanel" style="margin-top:16px;"><div class="empty-state">Selecione um estudante para ver o histórico.</div></div>
+            <div class="table-wrap" style="margin-top:16px;">
+              <table>
+                <thead><tr><th>Estudante</th><th>Série</th><th>Turma</th><th>Responsável</th><th>Ações</th></tr></thead>
+                <tbody id="studentsBody"></tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -142,17 +216,21 @@
       document.getElementById('studentSearch').addEventListener('input', async (event) => {
         searchTerm = event.target.value;
         await render();
-        if (selectedStudentId) await selectStudent(selectedStudentId);
       });
 
       const filtered = getFilteredStudents();
       document.getElementById('studentsBody').innerHTML = filtered.length ? filtered.map((student) => `
         <tr>
-          <td><strong>${escapeHtml(student.full_name)}</strong><div class="muted">${escapeHtml(student.guardian_email || '-')}</div></td>
+          <td>
+            <div class="student-meta">
+              ${buildStudentAvatar(student)}
+              <div><strong>${escapeHtml(student.full_name)}</strong><div class="muted">${escapeHtml(student.guardian_email || '-')}</div></div>
+            </div>
+          </td>
           <td>${escapeHtml(student.grade_level || '-')}</td>
           <td>${escapeHtml(student.class_name || '-')}</td>
-          <td>${escapeHtml(student.guardian_name || '-')}</td>
-          <td><div class="table-actions"><button class="btn" data-view="${student.id}">Histórico</button><button class="btn" data-edit="${student.id}">Editar</button></div></td>
+          <td>${escapeHtml(student.guardian_name || '-')}<div class="muted">${escapeHtml(student.guardian_phone || '-')}</div></td>
+          <td><div class="table-actions"><button class="btn" data-view="${student.id}">Histórico por estudante</button><button class="btn" data-edit="${student.id}">Editar</button></div></td>
         </tr>
       `).join('') : '<tr><td colspan="5"><div class="empty-state">Nenhum estudante cadastrado ainda.</div></td></tr>';
 
@@ -162,37 +240,57 @@
       }));
 
       document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', async () => {
-        await selectStudent(button.dataset.view);
+        await openHistoryModal(button.dataset.view);
       }));
-
-      if (selectedStudentId) await selectStudent(selectedStudentId);
     }
 
     async function load() {
-      setLoadingState(true, 'Buscando estudantes...');
+      setLoadingState(true, 'Buscando estudantes e preparando combos inteligentes...');
+      me = await requireAuth();
       students = await getJson('/students');
+      refreshCombos();
       await render();
       setLoadingState(false);
     }
 
+    photoInput.addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('A imagem precisa ter até 2 MB.', 'error');
+        photoInput.value = '';
+        return;
+      }
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      form.photo_data_url.value = dataUrl;
+      updatePreview(form.full_name.value || '', dataUrl);
+    });
+
+    form.full_name.addEventListener('input', () => updatePreview(form.full_name.value, form.photo_data_url.value));
     document.getElementById('closeModal').addEventListener('click', closeModal);
     modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
+    document.getElementById('closeHistoryModal').addEventListener('click', () => historyModal.classList.remove('visible'));
+    historyModal.addEventListener('click', (event) => { if (event.target === historyModal) historyModal.classList.remove('visible'); });
 
-    form.addEventListener('submit', async (event) => {
+    document.getElementById('studentForm').addEventListener('submit', async (event) => {
       event.preventDefault();
-      const payload = Object.fromEntries(new FormData(form).entries());
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
       const id = payload.id;
       delete payload.id;
       setLoadingState(true, id ? 'Atualizando estudante...' : 'Criando estudante...');
       try {
-        const saved = await getJson(id ? `/students/${id}` : '/students', {
-          method: id ? 'PATCH' : 'POST',
-          body: JSON.stringify(payload)
-        });
-        if (id) historyCache.delete(id);
-        selectedStudentId = saved.id;
+        await getJson(id ? `/students/${id}` : '/students', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
         showToast(id ? 'Estudante atualizado.' : 'Estudante criado.');
         closeModal();
+        event.currentTarget.reset();
+        photoInput.value = '';
+        updatePreview('', '');
+        historyCache.clear();
         await load();
       } catch (error) {
         setLoadingState(false);

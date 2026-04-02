@@ -8,76 +8,125 @@
 </head>
 <body>
   <div id="appShell"></div>
-
   <main class="form-shell container" id="diagnosticoMount"></main>
 
   <script type="module">
-    import { getJson, formatDimensionLabel, requireAuth, installShell, setLoadingState, showToast, setShellContent, escapeHtml } from '/js/app.js';
+    import { getJson, formatDimensionLabel, requireAuth, installShell, setLoadingState, showToast, setShellContent, escapeHtml, validateRequiredFields, attachPhoneMask } from '/js/app.js';
 
     const mount = document.getElementById('diagnosticoMount');
     let currentStep = 1;
     let questions = [];
     let cycles = [];
+    let students = [];
+    let me = null;
+
+    const stepMessages = {
+      1: 'Identificação do estudante',
+      2: 'Contexto e participantes',
+      3: 'Resposta institucional base',
+      4: 'Finalização e IA'
+    };
+
+    function getUniqueOptions(key) {
+      return [...new Set(students.map((item) => (item[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }
+
+    function fillSelect(selectId, values = [], placeholder = 'Selecione') {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = `<option value="">${placeholder}</option>` + values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+      if (values.includes(current)) select.value = current;
+    }
 
     function renderLayout(user) {
-      const userName = user?.full_name || user?.full_name || 'Usuário';
+      const userName = user?.full_name || 'Usuário';
       installShell({ title: 'Fluxo guiado de diagnóstico', userName, user });
       setShellContent(`
-        <div class="step-indicator">
-          <div class="step-chip active" data-step-chip="1">1. Estudante</div>
-          <div class="step-chip" data-step-chip="2">2. Contexto</div>
-          <div class="step-chip" data-step-chip="3">3. Respostas</div>
-          <div class="step-chip" data-step-chip="4">4. Finalização</div>
-        </div>
-        <div class="card">
-          <form id="diagnosticForm">
-            <section data-step="1">
-              <h2>Dados do estudante</h2>
-              <div class="grid-2">
-                <div class="field"><label>Nome completo</label><input name="full_name" required /></div>
-                <div class="field"><label>Série / ano</label><input name="grade_level" placeholder="Ex: 7º ano" /></div>
-                <div class="field"><label>Turma</label><input name="class_name" placeholder="Ex: Turma B" /></div>
-                <div class="field"><label>Escola</label><input name="school_name" /></div>
-                <div class="field"><label>Responsável</label><input name="guardian_name" /></div>
-                <div class="field"><label>E-mail do responsável</label><input name="guardian_email" type="email" /></div>
-              </div>
-            </section>
-            <section data-step="2" hidden>
-              <h2>Contexto de avaliação</h2>
-              <div class="grid-2">
-                <div class="field"><label>Ciclo</label><select name="cycle_id" id="cycleSelect"><option value="">Sem ciclo</option></select></div>
-                <div class="field"><label>Método</label><input name="method_name" value="C.O.R.E. 360" /></div>
-              </div>
-              <div class="field"><label>Notas do diagnóstico</label><textarea name="notes" placeholder="Ex: Oscilação em prazos, ansiedade em avaliações..."></textarea></div>
-              <div class="card surface-soft" style="margin-top:16px;">
-                <div class="toolbar"><div><h3 style="margin:0;">Quem vai participar da avaliação 360º?</h3><div class="muted">Cadastre os convites já nesta etapa. O sistema cria os links individuais automaticamente.</div></div></div>
-                <div class="grid-2" style="margin-top:16px;">
-                  <div class="field"><label>Professor(a)</label><input name="teacher_name" placeholder="Nome do professor responsável" /></div>
-                  <div class="field"><label>E-mail do professor(a)</label><input name="teacher_email" type="email" /></div>
-                  <div class="field"><label>Responsável (nome)</label><input name="guardian_respondent_name" placeholder="Pai, mãe ou responsável" /></div>
-                  <div class="field"><label>E-mail do responsável</label><input name="guardian_respondent_email" type="email" /></div>
-                  <div class="field"><label>Respondente institucional</label><input name="institutional_name" value="Coordenação pedagógica" /></div>
-                  <div class="field"><label>E-mail institucional</label><input name="institutional_email" type="email" /></div>
+        <div class="diagnostic-layout">
+          <div class="step-indicator wizard-steps">
+            <div class="wizard-progress-shell card surface-soft">
+              <div class="wizard-progress-head">
+                <div>
+                  <div class="eyebrow">✨ Wizard de diagnóstico</div>
+                  <h2 style="margin:8px 0 0;">Fluxo mobile-first com progresso crescente</h2>
+                  <div class="muted" id="wizardStepLabel">${stepMessages[1]}</div>
                 </div>
+                <strong id="wizardPercent">25%</strong>
               </div>
-            </section>
-            <section data-step="3" hidden>
-              <h2>Respostas-base (respondente institucional)</h2>
-              <div id="questionsContainer"></div>
-            </section>
-            <section data-step="4" hidden>
-              <h2>Finalizar e gerar leitura</h2>
-              <p class="muted">Ao concluir, o sistema cria estudante, avaliação, convites dos respondentes, salva a resposta institucional inicial, deixa os links prontos para aluno, professor e responsável e redireciona para o resultado.</p>
-              <div class="card" style="background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.22);">
-                <strong>Fluxo automático:</strong>
-                <div class="muted" style="margin-top:10px;">Cadastro → convites 360º → resposta institucional → coleta externa → scoring → IA → resultado</div>
+              <div class="wizard-progress-bar"><span id="wizardProgressBar" style="width:25%;"></span></div>
+              <div class="wizard-step-grid">
+                <div class="step-chip active" data-step-chip="1">1. Estudante</div>
+                <div class="step-chip" data-step-chip="2">2. Contexto</div>
+                <div class="step-chip" data-step-chip="3">3. Respostas</div>
+                <div class="step-chip" data-step-chip="4">4. Finalização</div>
               </div>
-            </section>
-            <div class="form-actions">
-              <button type="button" id="prevBtn" class="btn">Voltar</button>
-              <button type="button" id="nextBtn" class="btn primary">Próximo</button>
             </div>
-          </form>
+          </div>
+          <div class="diagnostic-hero">
+            <div class="card">
+              <form id="diagnosticForm">
+                <section data-step="1">
+                  <h2>Dados do estudante</h2>
+                  <div class="grid-2">
+                    <div class="field"><label>Nome completo do estudante</label><input name="full_name" required /></div>
+                    <div class="field"><label>Escola</label><input name="school_name" required readonly /></div>
+                    <div class="field"><label>Série / ano</label><select name="grade_level" id="gradeSelect" required><option value="">Selecione a série</option></select></div>
+                    <div class="field"><label>Turma</label><select name="class_name" id="classSelect" required><option value="">Selecione a turma</option></select></div>
+                    <div class="field"><label>Responsável</label><input name="guardian_name" required /></div>
+                    <div class="field"><label>Telefone do responsável</label><input name="guardian_phone" id="guardianPhoneWizard" required inputmode="numeric" placeholder="(00) 00000-0000" /></div>
+                    <div class="field"><label>E-mail do responsável</label><input name="guardian_email" type="email" required /></div>
+                  </div>
+                </section>
+                <section data-step="2" hidden>
+                  <h2>Contexto de avaliação</h2>
+                  <div class="grid-2">
+                    <div class="field"><label>Ciclo</label><select name="cycle_id" id="cycleSelect"><option value="">Sem ciclo</option></select></div>
+                    <div class="field"><label>Método</label><input name="method_name" value="C.O.R.E. 360" required /></div>
+                  </div>
+                  <div class="field"><label>Notas do diagnóstico</label><textarea name="notes" placeholder="Ex: Oscilação em prazos, ansiedade em avaliações, dificuldades de convivência..."></textarea></div>
+                  <div class="card surface-soft" style="margin-top:16px;">
+                    <div class="toolbar"><div><h3 style="margin:0;">Quem participa da avaliação 360º?</h3><div class="muted">Os links individuais são criados automaticamente após o fechamento.</div></div></div>
+                    <div class="grid-2" style="margin-top:16px;">
+                      <div class="field"><label>Professor(a)</label><input name="teacher_name" required placeholder="Nome do professor responsável" /></div>
+                      <div class="field"><label>E-mail do professor(a)</label><input name="teacher_email" type="email" required /></div>
+                      <div class="field"><label>Responsável (nome)</label><input name="guardian_respondent_name" required placeholder="Pai, mãe ou responsável" /></div>
+                      <div class="field"><label>E-mail do responsável</label><input name="guardian_respondent_email" type="email" required /></div>
+                      <div class="field"><label>Respondente institucional</label><input name="institutional_name" required value="Coordenação pedagógica" /></div>
+                      <div class="field"><label>E-mail institucional</label><input name="institutional_email" type="email" required /></div>
+                    </div>
+                  </div>
+                </section>
+                <section data-step="3" hidden>
+                  <h2>Respostas-base (respondente institucional)</h2>
+                  <div id="questionsContainer"></div>
+                </section>
+                <section data-step="4" hidden>
+                  <h2>Finalizar e gerar leitura</h2>
+                  <p class="muted">Ao concluir, o sistema cadastra o estudante, cria a avaliação, gera links para aluno, professor e responsável, calcula score e dispara a leitura da IA.</p>
+                  <div class="flow-steps">
+                    <div class="flow-step"><span>1</span><div><strong>Cadastro validado</strong><small>Estudante e contexto ficam prontos sem retrabalho.</small></div></div>
+                    <div class="flow-step"><span>2</span><div><strong>Convites 360º</strong><small>Professor, responsável e institucional recebem links individuais.</small></div></div>
+                    <div class="flow-step"><span>3</span><div><strong>Score e IA</strong><small>O sistema calcula dimensões e monta a leitura acionável.</small></div></div>
+                  </div>
+                </section>
+                <div class="form-actions">
+                  <button type="button" id="prevBtn" class="btn">Voltar</button>
+                  <button type="button" id="nextBtn" class="btn primary">Próximo</button>
+                </div>
+              </form>
+            </div>
+            <aside class="card diagnostic-side-panel">
+              <div class="eyebrow">🪄 Experiência orientada</div>
+              <h3 style="margin:0 0 10px;">Uma jornada mais clara e mais humana</h3>
+              <p class="muted">Cada etapa foi desenhada para reduzir erro operacional, acelerar cadastro e deixar o diagnóstico mais lúdico e confiável.</p>
+              <div class="diagnostic-aside-list">
+                <div class="diagnostic-aside-item"><span>🎒</span><div><strong>Cadastro inteligente</strong><small>Escola preenchida automaticamente e combos reaproveitando séries e turmas já cadastradas.</small></div></div>
+                <div class="diagnostic-aside-item"><span>📱</span><div><strong>First mobile</strong><small>Fluxo enxuto, campos grandes, passos curtos e validação visível.</small></div></div>
+                <div class="diagnostic-aside-item"><span>🤖</span><div><strong>Loading de IA</strong><small>Ao finalizar, o usuário acompanha a análise sendo preparada.</small></div></div>
+              </div>
+            </aside>
+          </div>
         </div>
       `);
     }
@@ -87,20 +136,25 @@
       const chips = [...document.querySelectorAll('[data-step-chip]')];
       const prevBtn = document.getElementById('prevBtn');
       const nextBtn = document.getElementById('nextBtn');
+      const percent = `${currentStep * 25}%`;
       steps.forEach((section) => section.hidden = Number(section.dataset.step) !== currentStep);
       chips.forEach((chip) => chip.classList.toggle('active', Number(chip.dataset.stepChip) === currentStep));
       prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
       nextBtn.textContent = currentStep === 4 ? 'Concluir diagnóstico' : 'Próximo';
       nextBtn.className = currentStep === 4 ? 'btn success' : 'btn primary';
+      document.getElementById('wizardProgressBar').style.width = percent;
+      document.getElementById('wizardPercent').textContent = percent;
+      document.getElementById('wizardStepLabel').textContent = stepMessages[currentStep];
     }
 
     function renderQuestions() {
       document.getElementById('questionsContainer').innerHTML = questions.map((question) => `
-        <div class="question">
-          <div><strong>${formatDimensionLabel(question.dimension)}</strong> • ${escapeHtml(question.pillar_label)}</div>
+        <div class="question playful-question">
+          <div><span class="question-pill">${formatDimensionLabel(question.dimension)}</span></div>
+          <div style="margin-top:10px;"><strong>${escapeHtml(question.pillar_label)}</strong></div>
           <div style="margin-top:8px;">${escapeHtml(question.prompt)}</div>
-          <div class="scale">
-            ${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''} /> ${score}</label>`).join('')}
+          <div class="scale cheerful-scale">
+            ${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''} /><span>${score}</span></label>`).join('')}
           </div>
         </div>
       `).join('');
@@ -112,12 +166,23 @@
       select.innerHTML = '<option value="">Sem ciclo</option>' + cycles.map((cycle) => `<option value="${cycle.id}">${escapeHtml(cycle.title)}</option>`).join('');
     }
 
+    function fillStudentCombos() {
+      fillSelect('gradeSelect', getUniqueOptions('grade_level'), 'Selecione a série');
+      fillSelect('classSelect', getUniqueOptions('class_name'), 'Selecione a turma');
+    }
+
+    function getStepSection() {
+      return document.querySelector(`[data-step="${currentStep}"]`);
+    }
+
     async function bootstrap() {
-      setLoadingState(true, 'Preparando fluxo guiado...');
-      const me = await requireAuth();
+      setLoadingState(true, 'Preparando fluxo guiado e montando wizard...');
+      me = await requireAuth();
       renderLayout(me);
-      [questions, cycles] = await Promise.all([getJson('/meta/questions'), getJson('/cycles')]);
+      [questions, cycles, students] = await Promise.all([getJson('/meta/questions'), getJson('/cycles'), getJson('/students')]);
+      document.querySelector('[name="school_name"]').value = me?.tenant_name || '';
       fillCycleSelect();
+      fillStudentCombos();
       renderQuestions();
       renderStep();
       bindEvents();
@@ -126,12 +191,19 @@
 
     function bindEvents() {
       const form = document.getElementById('diagnosticForm');
+      attachPhoneMask(document.getElementById('guardianPhoneWizard'));
+
       document.getElementById('prevBtn').addEventListener('click', () => {
         if (currentStep > 1) currentStep -= 1;
         renderStep();
       });
 
       document.getElementById('nextBtn').addEventListener('click', async () => {
+        if (!validateRequiredFields(getStepSection())) {
+          showToast('Preencha todos os campos obrigatórios desta etapa.', 'error');
+          return;
+        }
+
         if (currentStep < 4) {
           currentStep += 1;
           renderStep();
@@ -152,7 +224,8 @@
               class_name: formData.get('class_name'),
               school_name: formData.get('school_name'),
               guardian_name: formData.get('guardian_name'),
-              guardian_email: formData.get('guardian_email')
+              guardian_email: formData.get('guardian_email'),
+              guardian_phone: formData.get('guardian_phone')
             })
           });
 
@@ -167,27 +240,27 @@
           });
 
           const respondentsPayload = [
-                {
-                  respondent_type: 'institutional',
-                  respondent_name: formData.get('institutional_name') || 'Coordenação / Aplicação inicial',
-                  respondent_email: formData.get('institutional_email') || ''
-                },
-                {
-                  respondent_type: 'teacher',
-                  respondent_name: formData.get('teacher_name') || '',
-                  respondent_email: formData.get('teacher_email') || ''
-                },
-                {
-                  respondent_type: 'guardian',
-                  respondent_name: formData.get('guardian_respondent_name') || formData.get('guardian_name') || '',
-                  respondent_email: formData.get('guardian_respondent_email') || formData.get('guardian_email') || ''
-                },
-                {
-                  respondent_type: 'student',
-                  respondent_name: formData.get('full_name') || '',
-                  respondent_email: ''
-                }
-              ].filter((item) => item.respondent_name || item.respondent_email || item.respondent_type === 'institutional' || item.respondent_type === 'student');
+            {
+              respondent_type: 'institutional',
+              respondent_name: formData.get('institutional_name') || 'Coordenação / Aplicação inicial',
+              respondent_email: formData.get('institutional_email') || ''
+            },
+            {
+              respondent_type: 'teacher',
+              respondent_name: formData.get('teacher_name') || '',
+              respondent_email: formData.get('teacher_email') || ''
+            },
+            {
+              respondent_type: 'guardian',
+              respondent_name: formData.get('guardian_respondent_name') || formData.get('guardian_name') || '',
+              respondent_email: formData.get('guardian_respondent_email') || formData.get('guardian_email') || ''
+            },
+            {
+              respondent_type: 'student',
+              respondent_name: formData.get('full_name') || '',
+              respondent_email: ''
+            }
+          ].filter((item) => item.respondent_name || item.respondent_email || item.respondent_type === 'institutional' || item.respondent_type === 'student');
 
           const respondents = await getJson(`/assessments/${assessment.id}/respondents`, {
             method: 'POST',
@@ -205,6 +278,7 @@
             })
           });
 
+          setLoadingState(true, 'A IA está consolidando dimensões, riscos e recomendações...');
           await getJson(`/assessments/${assessment.id}/complete`, { method: 'POST' });
           showToast('Diagnóstico concluído com sucesso.');
           window.location.href = `/resultado.html?id=${assessment.id}`;

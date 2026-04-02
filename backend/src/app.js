@@ -9,6 +9,7 @@ import reportsRoutes from './routes/reports.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import metaRoutes from './routes/meta.routes.js';
 import cyclesRoutes from './routes/cycles.routes.js';
+import roadmapRoutes from './routes/roadmap.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import { providerWebhook } from './controllers/billing.controller.js';
@@ -47,11 +48,16 @@ export function createApp() {
   app.use('/api/assessments', authMiddleware, assessmentsRoutes);
   app.use('/api/dashboard', authMiddleware, dashboardRoutes);
   app.use('/api/cycles', authMiddleware, cyclesRoutes);
+  app.use('/api/roadmap', authMiddleware, roadmapRoutes);
 
   app.use(express.static(frontendDir));
 
   app.get('/', (req, res) => {
     res.sendFile(path.join(frontendDir, 'index.html'));
+  });
+
+  app.get('/roadmap', (req, res) => {
+    res.sendFile(path.join(frontendDir, 'roadmap.html'));
   });
 
   app.use(notFoundMiddleware);

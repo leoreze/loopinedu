@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopinEdu • Roadmap</title>
+  <style>
+    :root{
+      --navy:#233347;--teal:#2A877F;--green:#8CBC5E;--paper:#F2EEE9;--white:#fff;--muted:#617184;--line:rgba(35,51,71,.12);--shadow:0 16px 36px rgba(35,51,71,.12)
+    }
+    *{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(180deg,#f8f5ef 0%,#F2EEE9 100%);color:var(--navy)}
+    a{text-decoration:none;color:inherit}.page{min-height:100vh}
+    .topbar{position:sticky;top:0;z-index:70;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px;background:rgba(255,255,255,.9);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);box-shadow:0 12px 24px rgba(35,51,71,.06)}
+    .brand{display:flex;align-items:center;gap:14px;min-width:0}.logo-postit{position:relative;display:grid;place-items:center;width:72px;height:72px;border-radius:22px;background:linear-gradient(180deg,#fff,#f5f6f8);box-shadow:0 16px 24px rgba(35,51,71,.18);transform:rotate(-2deg);transition:transform .2s ease, box-shadow .2s ease}.logo-postit:hover{transform:rotate(1deg) translateY(-2px);box-shadow:0 18px 28px rgba(35,51,71,.22)}
+    .logo-postit img{width:58px;height:58px;object-fit:contain}.title h1{margin:0;font-size:clamp(1.05rem,2vw,1.4rem);letter-spacing:-.03em}.title p{margin:4px 0 0;font-size:.93rem;color:var(--muted)}
+    .nav-links{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-link{padding:11px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:800;color:var(--navy);box-shadow:0 8px 18px rgba(35,51,71,.06)}.nav-link.primary{background:linear-gradient(135deg,var(--teal),#3ba69d);color:#fff;border-color:transparent}
+    .content{padding:24px}.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-bottom:18px}.card{background:rgba(255,255,255,.84);border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .hero-main{padding:24px;position:relative;overflow:hidden}.hero-main:before{content:"";position:absolute;right:-60px;top:-60px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(42,135,127,.18),transparent 70%)}
+    .eyebrow{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(42,135,127,.1);color:var(--teal);font-size:.8rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase}.hero-main h2{margin:14px 0 10px;font-size:clamp(1.6rem,3vw,2.4rem);letter-spacing:-.04em;max-width:17ch}.hero-main p{margin:0;color:#526173;line-height:1.65;max-width:62ch}
+    .hero-tags{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.hero-tag{padding:10px 12px;border-radius:999px;background:rgba(140,188,94,.16);color:#4d7b2c;font-size:.82rem;font-weight:800}
+    .hero-side{padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.kpi{padding:16px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,244,239,.96));border:1px solid var(--line)}.kpi .label{font-size:.76rem;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em}.kpi .value{margin-top:8px;font-size:1.7rem;font-weight:900;letter-spacing:-.04em}
+    .status-note{display:flex;align-items:center;gap:8px;font-size:.88rem;color:#4e6072;margin-top:14px}.status-dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+    .board{display:grid;grid-template-columns:repeat(6,minmax(285px,1fr));gap:16px;align-items:start;overflow:auto;padding-bottom:14px}.column{padding:14px;min-height:240px}.column-header{position:sticky;top:101px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 10px 14px;margin:-2px -2px 12px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-top-left-radius:26px;border-top-right-radius:26px}
+    .column-title{display:flex;align-items:center;gap:10px}.dot{width:12px;height:12px;border-radius:50%}.count{min-width:30px;height:30px;display:grid;place-items:center;border-radius:999px;background:rgba(35,51,71,.08);font-size:.82rem;font-weight:800}.cards{display:grid;gap:12px;min-height:150px}.cards.drag-target{outline:2px dashed rgba(42,135,127,.42);outline-offset:8px;border-radius:18px}
+    .roadmap-card{padding:16px;border-radius:22px;border:1px solid rgba(35,51,71,.1);background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,246,242,.96));box-shadow:0 10px 22px rgba(35,51,71,.08);cursor:pointer;transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease}.roadmap-card:hover{transform:translateY(-2px);box-shadow:0 16px 28px rgba(35,51,71,.14)}.roadmap-card.dragging{opacity:.48;transform:scale(.98)}
+    .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}.card-top h4{margin:0;font-size:1rem;line-height:1.35;letter-spacing:-.02em}.desc{margin:0 0 12px;color:var(--muted);line-height:1.55}
+    .pill{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;font-size:.74rem;font-weight:900;letter-spacing:.04em;text-transform:uppercase}.badge-product{background:rgba(42,135,127,.12);color:#1f736c}.badge-data{background:rgba(140,188,94,.16);color:#4d7b2c}.badge-ai{background:rgba(35,51,71,.1);color:#233347}.badge-growth{background:rgba(255,190,92,.18);color:#9a6b12}.badge-ux{background:rgba(113,113,245,.12);color:#4b49b6}.badge-enterprise{background:rgba(201,92,255,.12);color:#8f25c2}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.meta span{padding:7px 10px;border-radius:999px;background:rgba(35,51,71,.06);font-size:.78rem;font-weight:700}.progress{height:8px;border-radius:999px;background:rgba(35,51,71,.08);overflow:hidden}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--teal));border-radius:inherit}
+    .helper{font-size:.92rem;color:#506071;line-height:1.6;padding:18px 20px}.empty{padding:24px;text-align:center;color:var(--muted)}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(20,29,39,.48);display:none;align-items:center;justify-content:center;padding:18px;z-index:90}.modal-backdrop.open{display:flex}.modal{width:min(880px,100%);max-height:86vh;overflow:auto;background:#fff;border-radius:28px;box-shadow:0 24px 48px rgba(20,29,39,.28);border:1px solid var(--line)}.modal-header{position:sticky;top:0;z-index:2;padding:18px 20px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.96);backdrop-filter:blur(10px);display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.modal-header h3{margin:8px 0 0;font-size:1.35rem;letter-spacing:-.03em}.close-btn{border:0;background:rgba(35,51,71,.08);width:42px;height:42px;border-radius:999px;font-size:1.2rem;cursor:pointer;color:var(--navy)}
+    .modal-body{padding:20px;display:grid;gap:18px}.modal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.info-card{padding:16px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,246,242,.96));border:1px solid var(--line)}.info-card .label{font-size:.76rem;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em}.info-card .value{margin-top:8px;font-weight:800;line-height:1.55}.modal-desc{padding:18px;border:1px solid var(--line);border-radius:22px;background:rgba(42,135,127,.05)}.modal-desc h4{margin:0 0 8px;font-size:1rem}.modal-desc p{margin:0;line-height:1.7;color:#4f6071}
+    @media (max-width:1024px){.hero{grid-template-columns:1fr}.column-header{top:89px}.board{grid-template-columns:repeat(6,82vw)}}
+    @media (max-width:720px){.topbar{padding:12px 14px;align-items:flex-start;flex-direction:column}.content{padding:14px}.hero-side,.modal-grid{grid-template-columns:1fr 1fr}.logo-postit{width:64px;height:64px}.column-header{top:117px}}
+    @media (max-width:560px){.hero-side,.modal-grid{grid-template-columns:1fr}.nav-links{width:100%}.nav-link{flex:1;text-align:center;justify-content:center;display:flex}.column-header{top:161px}.board{grid-template-columns:repeat(6,88vw)}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-postit"><img src="/assets/brand/logo-loopinedu-icon.png" alt="LoopinEdu" /></div>
+        <div class="title">
+          <h1>LoopinEdu • Roadmap do Produto</h1>
+          <p>Board público com colunas completas, modal de detalhamento e visão contínua de evolução.</p>
+        </div>
+      </div>
+      <nav class="nav-links" aria-label="Navegação principal">
+        <a class="nav-link" href="/">Ir para landing page</a>
+        <a class="nav-link primary" href="/login.html">Entrar no sistema</a>
+      </nav>
+    </header>
+
+    <main class="content">
+      <section class="hero">
+        <article class="card hero-main">
+          <span class="eyebrow">Roadmap versionado</span>
+          <h2>Do backlog até a produção, com leitura clara por fase e versão.</h2>
+          <p>O backlog permanece ordenado por fase e versão, enquanto as demais colunas acompanham o fluxo real do board. Quando você estiver autenticado como admin ou coordinator, o drag and drop fica habilitado para mover cards e persistir a mudança no banco.</p>
+          <div class="hero-tags" id="versionTags"></div>
+          <div class="status-note"><span class="status-dot"></span><span id="editStatus">Modo leitura pública. Faça login para mover cards.</span></div>
+        </article>
+        <aside class="card hero-side">
+          <div class="kpi"><div class="label">Cards</div><div class="value" id="kpiCards">0</div></div>
+          <div class="kpi"><div class="label">Fases</div><div class="value" id="kpiPhases">0</div></div>
+          <div class="kpi"><div class="label">Horizonte</div><div class="value" id="kpiHorizon">12M</div></div>
+          <div class="kpi"><div class="label">Modo</div><div class="value" id="kpiMode" style="font-size:1.08rem">Público</div></div>
+        </aside>
+      </section>
+
+      <section class="board" id="boardRoot" aria-label="Roadmap estilo board"></section>
+      <section class="card helper">Clique em qualquer card para abrir o modal com todas as informações do roadmap. No backlog, a ordem visual respeita a sequência por fase e versão. Em modo autenticado, você pode arrastar cards entre colunas para atualizar o status.</section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="cardModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow" id="modalBadge">Card</span>
+          <h3 id="modalTitle">Detalhes do roadmap</h3>
+        </div>
+        <button class="close-btn" id="closeModal" aria-label="Fechar">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-desc">
+          <h4>Descrição</h4>
+          <p id="modalDescription">—</p>
+        </div>
+        <div class="modal-grid">
+          <div class="info-card"><div class="label">Versão</div><div class="value" id="modalVersion">—</div></div>
+          <div class="info-card"><div class="label">Fase</div><div class="value" id="modalPhase">—</div></div>
+          <div class="info-card"><div class="label">Categoria</div><div class="value" id="modalCategory">—</div></div>
+          <div class="info-card"><div class="label">Prioridade</div><div class="value" id="modalPriority">—</div></div>
+          <div class="info-card"><div class="label">Impacto</div><div class="value" id="modalImpact">—</div></div>
+          <div class="info-card"><div class="label">Complexidade</div><div class="value" id="modalComplexity">—</div></div>
+          <div class="info-card"><div class="label">Owner</div><div class="value" id="modalOwner">—</div></div>
+          <div class="info-card"><div class="label">Progresso</div><div class="value" id="modalProgress">—</div></div>
+          <div class="info-card"><div class="label">Status</div><div class="value" id="modalStatus">—</div></div>
+          <div class="info-card"><div class="label">ID do card</div><div class="value" id="modalId">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN_KEY = 'loopinedu_token';
+    const COLUMN_META = {
+      backlog: { label: 'Backlog', color: '#94a3b8' },
+      development: { label: 'Desenvolvimento', color: '#2A877F' },
+      testing: { label: 'Testes', color: '#8CBC5E' },
+      approved: { label: 'Homologados', color: '#0ea5e9' },
+      done: { label: 'Concluídos', color: '#10b981' },
+      production: { label: 'Produção', color: '#111827' }
+    };
+    const BADGE_CLASS = { product:'badge-product', data:'badge-data', ai:'badge-ai', growth:'badge-growth', ux:'badge-ux', enterprise:'badge-enterprise' };
+    const state = { cards: [], columns: [], canEdit: false, source: 'public' };
+
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c] || c)); }
+    function getToken() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } }
+    function getTenantParam() { return new URLSearchParams(window.location.search).get('tenant') || ''; }
+
+    function renderVersions(versions) {
+      document.getElementById('versionTags').innerHTML = (versions || []).map((version) => `<span class="hero-tag">${escapeHtml(version)}</span>`).join('');
+    }
+
+    function cardTemplate(card) {
+      const badgeClass = BADGE_CLASS[card.category] || 'badge-product';
+      return `
+        <article class="roadmap-card" draggable="${state.canEdit ? 'true' : 'false'}" data-card-id="${card.id}" data-status="${card.status}">
+          <div class="card-top">
+            <span class="pill ${badgeClass}">${escapeHtml(card.badge_label || card.category || 'Card')}</span>
+            <h4>${escapeHtml(card.version_label)} • ${escapeHtml(card.title)}</h4>
+          </div>
+          <p class="desc">${escapeHtml(card.description || '')}</p>
+          <div class="meta">
+            ${card.phase_label ? `<span>${escapeHtml(card.phase_label)}</span>` : ''}
+            ${card.priority_label ? `<span>Prioridade: ${escapeHtml(card.priority_label)}</span>` : ''}
+            ${card.owner_label ? `<span>Owner: ${escapeHtml(card.owner_label)}</span>` : ''}
+          </div>
+          <div class="progress"><i style="width:${Math.max(0, Math.min(100, Number(card.progress_percent || 0)))}%"></i></div>
+        </article>`;
+    }
+
+    function columnTemplate(column) {
+      const meta = COLUMN_META[column.key] || { label: column.label || column.key, color: '#94a3b8' };
+      return `
+        <section class="card column" data-column="${column.key}">
+          <div class="column-header">
+            <div class="column-title"><span class="dot" style="background:${meta.color}"></span><h3>${escapeHtml(column.label || meta.label)}</h3></div>
+            <span class="count" id="count-${column.key}">${column.items.length}</span>
+          </div>
+          <div class="cards" data-dropzone="${column.key}">
+            ${column.items.length ? column.items.map(cardTemplate).join('') : `<div class="empty">Nenhum card nesta coluna.</div>`}
+          </div>
+        </section>`;
+    }
+
+    function flattenCards(columns) {
+      return columns.flatMap((column) => column.items || []);
+    }
+
+    function renderBoard(columns, summary) {
+      state.columns = columns || [];
+      state.cards = flattenCards(columns || []);
+      document.getElementById('kpiCards').textContent = state.cards.length;
+      document.getElementById('kpiPhases').textContent = Number(summary?.phases || 0);
+      document.getElementById('kpiHorizon').textContent = `${Number(summary?.horizon_months || 12)}M`;
+      document.getElementById('boardRoot').innerHTML = columns.map(columnTemplate).join('');
+      renderVersions(summary?.versions || []);
+      mountDnD();
+    }
+
+    function openModal(cardId) {
+      const card = state.cards.find((item) => String(item.id) === String(cardId));
+      if (!card) return;
+      document.getElementById('modalBadge').textContent = card.badge_label || card.category || 'Card';
+      document.getElementById('modalBadge').className = `eyebrow ${BADGE_CLASS[card.category] || ''}`;
+      document.getElementById('modalTitle').textContent = `${card.version_label} • ${card.title}`;
+      document.getElementById('modalDescription').textContent = card.description || 'Sem descrição cadastrada.';
+      document.getElementById('modalVersion').textContent = card.version_label || '—';
+      document.getElementById('modalPhase').textContent = card.phase_label || '—';
+      document.getElementById('modalCategory').textContent = card.category || '—';
+      document.getElementById('modalPriority').textContent = card.priority_label || '—';
+      document.getElementById('modalImpact').textContent = card.impact_label || '—';
+      document.getElementById('modalComplexity').textContent = card.complexity_label || '—';
+      document.getElementById('modalOwner').textContent = card.owner_label || '—';
+      document.getElementById('modalProgress').textContent = `${Number(card.progress_percent || 0)}%`;
+      document.getElementById('modalStatus').textContent = COLUMN_META[card.status]?.label || card.status || '—';
+      document.getElementById('modalId').textContent = card.id || '—';
+      document.getElementById('cardModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() { document.getElementById('cardModal').classList.remove('open'); document.body.style.overflow = ''; }
+
+    async function request(url, options = {}) {
+      const headers = { Accept:'application/json', ...(options.headers || {}) };
+      const token = getToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const response = await fetch(url, { ...options, headers });
+      if (!response.ok) throw new Error('Falha na requisição');
+      return response.json();
+    }
+
+    function getColumnItems(columnKey) {
+      return state.columns.find((column) => column.key === columnKey)?.items || [];
+    }
+
+    async function moveCard(cardId, toStatus, destinationIndex) {
+      if (!state.canEdit) return;
+      const payload = await request(`/api/roadmap/${cardId}/move`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: toStatus, destinationIndex })
+      });
+      await loadRoadmap();
+      return payload;
+    }
+
+    function mountDnD() {
+      if (!state.canEdit) return;
+      let draggingId = null;
+      document.querySelectorAll('.roadmap-card').forEach((card) => {
+        card.addEventListener('dragstart', (event) => {
+          draggingId = card.dataset.cardId;
+          card.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', draggingId);
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          document.querySelectorAll('.cards').forEach((zone) => zone.classList.remove('drag-target'));
+        });
+      });
+
+      document.querySelectorAll('.cards').forEach((zone) => {
+        zone.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          zone.classList.add('drag-target');
+          event.dataTransfer.dropEffect = 'move';
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-target'));
+        zone.addEventListener('drop', async (event) => {
+          event.preventDefault();
+          zone.classList.remove('drag-target');
+          const cardId = event.dataTransfer.getData('text/plain') || draggingId;
+          const toStatus = zone.dataset.dropzone;
+          if (!cardId || !toStatus) return;
+          const cards = [...zone.querySelectorAll('.roadmap-card:not(.dragging)')];
+          const targetCard = event.target.closest('.roadmap-card');
+          let destinationIndex = cards.length;
+          if (targetCard) destinationIndex = cards.indexOf(targetCard);
+          try {
+            await moveCard(cardId, toStatus, destinationIndex);
+          } catch (error) {
+            alert('Não foi possível mover o card agora.');
+          }
+        });
+      });
+    }
+
+    async function loadRoadmap() {
+      const token = getToken();
+      const tenant = getTenantParam();
+      try {
+        let data;
+        if (token) {
+          try {
+            data = await request('/api/roadmap');
+            state.canEdit = Boolean(data?.can_edit);
+            state.source = 'private';
+          } catch {
+            data = await request(`/api/public/roadmap${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+            state.canEdit = false;
+            state.source = 'public';
+          }
+        } else {
+          data = await request(`/api/public/roadmap${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+          state.canEdit = false;
+          state.source = 'public';
+        }
+        document.getElementById('editStatus').textContent = state.canEdit ? 'Modo edição ativo. Arraste cards entre as colunas para atualizar o board.' : 'Modo leitura pública. Faça login para mover cards.';
+        document.getElementById('kpiMode').textContent = state.canEdit ? 'Editável' : 'Público';
+        renderBoard(Array.isArray(data?.columns) ? data.columns : [], data?.summary || {});
+      } catch (error) {
+        document.getElementById('boardRoot').innerHTML = '<section class="card helper">Não foi possível carregar o roadmap agora.</section>';
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const card = event.target.closest('.roadmap-card');
+      if (card) openModal(card.dataset.cardId);
+      if (event.target.id === 'closeModal' || event.target.id === 'cardModal') closeModal();
+    });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
+
+    loadRoadmap();
+  </script>
+</body>
+</html>

@@ -9,36 +9,87 @@
 <body>
   <div id="appShell"></div>
   <script type="module">
-    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, statusBadge, buildMiniBarChart, buildProgressDonut, formatDimensionLabel } from '/js/app.js';
+    import { requireAuth, installShell, setShellContent, getJson, setLoadingState, escapeHtml, statusBadge, buildMiniBarChart, buildProgressDonut, formatDimensionLabel, buildCoreMethodLegend, setInsightChatContext } from '/js/app.js';
+
+    function openAlertDetailsModal(title, description, items = []) {
+      const modal = document.getElementById('alertDetailsModal');
+      const titleNode = document.getElementById('alertDetailsTitle');
+      const bodyNode = document.getElementById('alertDetailsBody');
+      titleNode.textContent = title;
+      bodyNode.innerHTML = '<div class="empty-state">Carregando alertas relevantes...</div>';
+      modal.classList.add('visible');
+      setTimeout(() => {
+        bodyNode.innerHTML = items.length ? `
+          <div class="alert-detail-list">
+            ${items.map((item) => `
+              <article class="alert-detail-item">
+                <div class="alert-detail-top">
+                  <strong>${escapeHtml(item.full_name || 'Estudante')}</strong>
+                  ${statusBadge('completed')}
+                </div>
+                <div class="muted">${escapeHtml(description)}</div>
+                <div class="alert-detail-meta">
+                  <span>Emocional <strong>${Number(item.emotional_score || 0).toFixed(2)}</strong></span>
+                  <span>Organização <strong>${Number(item.organization_score || 0).toFixed(2)}</strong></span>
+                  <span>Turma <strong>${escapeHtml(item.class_name || '—')}</strong></span>
+                </div>
+              </article>
+            `).join('')}
+          </div>` : '<div class="empty-state">Nenhum alerta encontrado nesta dimensão.</div>';
+      }, 520);
+    }
 
     async function load() {
-      setLoadingState(true, 'Montando dashboard institucional...');
+      setLoadingState(true, 'Montando dashboard institucional com visual premium...');
       const me = await requireAuth();
       installShell({ title: 'Dashboard institucional', userName: me.full_name, user: me });
       setShellContent(`
-        <section class="page-section">
-          <div class="grid-4" id="metrics"></div><div class="card" id="tenantBanner"></div>
-          <div class="chart-grid">
+        <section class="page-section dashboard-page">
+          <div class="diagnostic-hero">
+            <div class="card gradient-premium">
+              <div class="eyebrow" style="background:rgba(255,255,255,.16); color:#fff;">📊 Panorama executivo</div>
+              <h2 style="margin:0 0 10px;">Leitura socioemocional com foco em ação</h2>
+              <p class="muted">Um dashboard mais claro, mais visual e mais fácil de navegar no mobile e no desktop.</p>
+              <div class="hero-inline-metrics compact-metrics" id="heroMetrics"></div>
+            </div>
+            <div class="card chart-card tenant-banner-card" id="tenantBanner"></div>
+          </div>
+
+          <div class="grid-4" id="metrics"></div>
+
+          <div class="card chart-card">
+            <div class="toolbar">
+              <div>
+                <h2 style="margin:0;">Método C.O.R.E. 360 em destaque</h2>
+                <div class="muted">Cada bloco mostra o significado da dimensão e a escala média atual do ambiente.</div>
+              </div>
+            </div>
+            <div id="coreLegend"></div>
+          </div>
+
+          <div class="dashboard-health-row">
+            <div class="card chart-card score-card-highlight health-card-standalone">
+              <div class="toolbar"><div><h2 style="margin:0;">Saúde geral atual</h2><div class="muted">Score médio global do ambiente institucional.</div></div></div>
+              <div id="overallGauge"></div>
+              <div class="inline-stat-grid playful-stat-grid" id="insightsGrid"></div>
+            </div>
+          </div>
+
+          <div class="dashboard-main-grid">
             <div class="card chart-card">
               <div class="toolbar"><div><h2 style="margin:0;">Desempenho por dimensão</h2><div class="muted">Leitura consolidada das quatro frentes do método.</div></div></div>
               <div id="dimensionChart"></div>
             </div>
             <div class="card chart-card">
-              <div class="toolbar"><div><h2 style="margin:0;">Saúde geral atual</h2><div class="muted">Score médio global do ambiente institucional.</div></div></div>
-              <div id="overallGauge"></div>
-              <div class="inline-stat-grid" id="insightsGrid" style="margin-top:18px;"></div>
-            </div>
-          </div>
-          <div class="grid-2">
-            <div class="card">
-              <div class="toolbar"><div><h2 style="margin:0;">Alertas prioritários</h2><div class="muted">Alunos com dimensões em atenção.</div></div></div>
-              <div id="alerts"></div>
-            </div>
-            <div class="card">
               <div class="toolbar"><div><h2 style="margin:0;">Distribuição por turma</h2><div class="muted">Média geral e volume de diagnósticos.</div></div></div>
               <div id="byClassChart"></div>
               <div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Turma</th><th>Total</th><th>Média</th></tr></thead><tbody id="byClass"></tbody></table></div>
             </div>
+          </div>
+
+          <div class="card alert-card-standalone">
+            <div class="toolbar"><div><h2 style="margin:0;">Alertas prioritários</h2><div class="muted">Lista rolável com os estudantes que pedem atenção imediata.</div></div></div>
+            <div id="alerts"></div>
           </div>
 
           <div class="grid-2">
@@ -47,16 +98,27 @@
               <div id="trendChart"></div>
             </div>
             <div class="card">
-              <div class="toolbar"><div><h2 style="margin:0;">Insights Premium</h2><div class="muted">Leitura de prioridade e divergência entre respondentes.</div></div></div>
+              <div class="toolbar"><div><h2 style="margin:0;">Insights Premium</h2><div class="muted">Leitura de prioridade, divergência e contexto institucional.</div></div></div>
               <div id="premiumInsights"></div>
             </div>
           </div>
+
           <div class="card">
             <div class="toolbar"><div><h2 style="margin:0;">Distribuição por série</h2><div class="muted">Panorama consolidado por faixa escolar.</div></div></div>
             <div id="byGradeChart"></div>
             <div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Série</th><th>Total</th><th>Média</th></tr></thead><tbody id="byGrade"></tbody></table></div>
           </div>
         </section>
+
+        <div class="modal-backdrop" id="alertDetailsModal">
+          <div class="card modal modal-compact">
+            <div class="toolbar">
+              <div><h2 id="alertDetailsTitle" style="margin:0;">Alertas detalhados</h2><div class="muted">Leitura dos estudantes que entraram na visão prioritária.</div></div>
+              <button type="button" class="btn" id="closeAlertDetails">Fechar</button>
+            </div>
+            <div id="alertDetailsBody" style="margin-top:16px;"></div>
+          </div>
+        </div>
       `);
 
       const overview = await getJson('/dashboard/overview');
@@ -73,21 +135,31 @@
           getJson('/dashboard/trends')
         ]);
       } catch (error) {
-        if (error.code === 'FEATURE_BLOCKED') {
-          advancedLocked = true;
-        } else {
-          throw error;
-        }
+        if (error.code === 'FEATURE_BLOCKED') advancedLocked = true;
+        else throw error;
       }
 
-      document.getElementById('tenantBanner').innerHTML = `<div class="toolbar"><div><h2 style="margin:0;">${escapeHtml(overview.tenant?.name || me.tenant_name || 'Ambiente')}</h2><div class="muted">Slug ${escapeHtml(overview.tenant?.slug || me.tenant_slug || '-')} • Plano ${escapeHtml((overview.tenant?.plan || me.plan || 'trial').toUpperCase())}</div></div><div class="inline-stat"><div class="muted">Trial</div><strong>${escapeHtml(new Date(overview.tenant?.trial_ends_at || me.trial_ends_at || Date.now()).toLocaleDateString('pt-BR'))}</strong></div></div>`;
+      document.getElementById('tenantBanner').innerHTML = `
+        <div class="eyebrow">🏫 Ambiente</div>
+        <h2 style="margin:0;">${escapeHtml(overview.tenant?.name || me.tenant_name || 'Ambiente')}</h2>
+        <p class="muted">Slug ${escapeHtml(overview.tenant?.slug || me.tenant_slug || '-')} • Plano ${escapeHtml((overview.tenant?.plan || me.plan || 'trial').toUpperCase())}</p>
+        <div class="diagnostic-aside-list tenant-banner-list">
+          <div class="diagnostic-aside-item split-meta"><span>🧪</span><div><strong>Trial</strong><small>${escapeHtml(new Date(overview.tenant?.trial_ends_at || me.trial_ends_at || Date.now()).toLocaleDateString('pt-BR'))}</small></div></div>
+          <div class="diagnostic-aside-item split-meta"><span>🎯</span><div><strong>Dimensão crítica</strong><small>${escapeHtml(formatDimensionLabel(overview.critical_dimension || '-'))}</small></div></div>
+        </div>`;
+
+      document.getElementById('heroMetrics').innerHTML = [
+        ['Estudantes', overview.total_students || 0],
+        ['Diagnósticos', overview.completed_assessments || 0],
+        ['Média geral', overview.average_overall_score || 0]
+      ].map(([label, value]) => `<div class="inline-chip hero-chip-contrast"><strong>${value}</strong><span>${label}</span></div>`).join('');
 
       document.getElementById('metrics').innerHTML = [
-        ['Total de estudantes', overview.total_students || 0],
-        ['Diagnósticos concluídos', overview.completed_assessments || 0],
-        ['Média geral', overview.average_overall_score || 0],
-        ['Alertas emocionais', overview.emotional_alerts || 0]
-      ].map(([label, value]) => `<div class="card metric-card"><div class="muted">${label}</div><div class="kpi">${value}</div></div>`).join('');
+        ['👥', 'Total de estudantes', overview.total_students || 0],
+        ['🧠', 'Diagnósticos concluídos', overview.completed_assessments || 0],
+        ['📈', 'Média geral', overview.average_overall_score || 0],
+        ['💛', 'Alertas emocionais', overview.emotional_alerts || 0]
+      ].map(([icon, label, value]) => `<div class="card metric-card compact-dashboard-card"><div class="metric-topline"><span>${icon}</span><div class="muted">${label}</div></div><div class="kpi">${value}</div></div>`).join('');
 
       const dimensionItems = [
         { label: formatDimensionLabel('cognitive'), value: Number(overview.avg_cognitive || 0) },
@@ -95,19 +167,26 @@
         { label: formatDimensionLabel('relational'), value: Number(overview.avg_relational || 0) },
         { label: formatDimensionLabel('emotional'), value: Number(overview.avg_emotional || 0) }
       ];
+
+      document.getElementById('coreLegend').innerHTML = buildCoreMethodLegend({
+        cognitive: Number(overview.avg_cognitive || 0),
+        organization: Number(overview.avg_organization || 0),
+        relational: Number(overview.avg_relational || 0),
+        emotional: Number(overview.avg_emotional || 0)
+      });
       document.getElementById('dimensionChart').innerHTML = buildMiniBarChart(dimensionItems, { maxValue: 5 });
       document.getElementById('overallGauge').innerHTML = buildProgressDonut(Number(overview.average_overall_score || 0), 5, 'Média geral');
       document.getElementById('insightsGrid').innerHTML = `
-        <div class="inline-stat"><div class="muted">Dimensão crítica</div><strong>${escapeHtml(formatDimensionLabel(overview.critical_dimension || '-'))}</strong></div>
-        <div class="inline-stat"><div class="muted">Dimensão forte</div><strong>${escapeHtml(formatDimensionLabel(overview.strongest_dimension || '-'))}</strong></div>
-        <div class="inline-stat"><div class="muted">Alertas emocionais</div><strong>${Number(overview.emotional_alerts || 0)}</strong></div>
-        <div class="inline-stat"><div class="muted">Alertas de organização</div><strong>${Number(overview.organization_alerts || 0)}</strong></div>
+        <div class="inline-stat playful-stat"><div class="stat-icon">🎯</div><div><div class="muted">Dimensão crítica</div><strong>${escapeHtml(formatDimensionLabel(overview.critical_dimension || '-'))}</strong></div></div>
+        <div class="inline-stat playful-stat"><div class="stat-icon">🌟</div><div><div class="muted">Dimensão forte</div><strong>${escapeHtml(formatDimensionLabel(overview.strongest_dimension || '-'))}</strong></div></div>
+        <div class="inline-stat playful-stat with-link"><div class="stat-icon">💛</div><div><div class="muted">Alertas emocionais</div><strong>${Number(overview.emotional_alerts || 0)}</strong></div><button class="mini-plus-link" type="button" id="openEmotionAlerts">(+)</button></div>
+        <div class="inline-stat playful-stat with-link"><div class="stat-icon">🗂️</div><div><div class="muted">Alertas de organização</div><strong>${Number(overview.organization_alerts || 0)}</strong></div><button class="mini-plus-link" type="button" id="openOrgAlerts">(+)</button></div>
       `;
 
       document.getElementById('alerts').innerHTML = alerts.length ? `
-        <div class="table-wrap"><table><thead><tr><th>Estudante</th><th>Emocional</th><th>Organização</th><th>Status</th></tr></thead><tbody>
-          ${alerts.map((item) => `<tr><td>${escapeHtml(item.full_name)}</td><td>${item.emotional_score ?? '--'}</td><td>${item.organization_score ?? '--'}</td><td>${statusBadge('completed')}</td></tr>`).join('')}
-        </tbody></table></div>
+        <div class="alert-scroll-list">
+          ${alerts.map((item) => `<article class="alert-row-card"><div><strong>${escapeHtml(item.full_name)}</strong><div class="muted">${escapeHtml(item.class_name || 'Turma não informada')}</div></div><div class="alert-row-metrics"><span>Emocional <strong>${Number(item.emotional_score || 0).toFixed(2)}</strong></span><span>Organização <strong>${Number(item.organization_score || 0).toFixed(2)}</strong></span>${statusBadge('completed')}</div></article>`).join('')}
+        </div>
       ` : '<div class="empty-state">Nenhum alerta crítico encontrado.</div>';
 
       const classItems = byClass.map((item) => ({ label: item.class_name || 'Sem turma', value: Number(item.average_score || 0) }));
@@ -118,15 +197,28 @@
       const trendItems = trends.map((item) => ({ label: item.label || 'Ciclo', value: Number(item.average_score || 0) }));
       document.getElementById('trendChart').innerHTML = advancedLocked ? '<div class="empty-state">Disponível nos planos Pro e Premium. <a href="/billing.html">Fazer upgrade</a>.</div>' : buildMiniBarChart(trendItems, { maxValue: 5 });
       document.getElementById('premiumInsights').innerHTML = premium ? `
-        <div class="inline-stat-grid">
-          <div class="inline-stat"><div class="muted">Conclusão dos respondentes</div><strong>${Number(premium.respondent_completion_rate || 0).toFixed(1)}%</strong></div>
-          <div class="inline-stat"><div class="muted">Prioridades</div><strong>${(premium.priority_students || []).length}</strong></div>
-        </div>
-        <div style="margin-top:14px;">${buildMiniBarChart((premium.divergence_alerts || []).map((item) => ({ label: item.full_name, value: Number(item.divergence || 0) })), { maxValue: 5 })}</div>
-      ` : '<div class="empty-state">Disponível no Premium Workspace.</div>';
+        <div class="premium-insight-stack">
+          <div class="insight-pill"><strong>Taxa de conclusão</strong><span>${Number(premium.respondent_completion_rate || 0).toFixed(1)}%</span></div>
+          <div class="insight-pill"><strong>Turmas fortes</strong><span>${(premium.strongest_classes || []).slice(0, 2).map((item) => escapeHtml(item.class_name)).join(' • ') || 'Sem dados'}</span></div>
+          <div class="insight-pill"><strong>Divergências</strong><span>${(premium.divergence_alerts || []).length} caso(s) em monitoramento</span></div>
+          <div class="insight-pill"><strong>Prioridade</strong><span>${(premium.priority_students || []).length} estudante(s) em foco</span></div>
+        </div>` : '<div class="empty-state">Insights premium disponíveis após consolidação avançada.</div>';
+
       const gradeItems = byGrade.map((item) => ({ label: item.grade_level || 'Sem série', value: Number(item.average_score || 0) }));
       document.getElementById('byGradeChart').innerHTML = advancedLocked ? '<div class="empty-state">Disponível nos planos Pro e Premium. <a href="/billing.html">Fazer upgrade</a>.</div>' : buildMiniBarChart(gradeItems, { maxValue: 5 });
       document.getElementById('byGrade').innerHTML = byGrade.map((item) => `<tr><td>${escapeHtml(item.grade_level || 'Sem série')}</td><td>${item.total_assessments}</td><td>${item.average_score}</td></tr>`).join('') || '<tr><td colspan="3">Sem dados.</td></tr>';
+
+      document.getElementById('closeAlertDetails')?.addEventListener('click', () => document.getElementById('alertDetailsModal').classList.remove('visible'));
+      document.getElementById('alertDetailsModal')?.addEventListener('click', (event) => {
+        if (event.target.id === 'alertDetailsModal') document.getElementById('alertDetailsModal').classList.remove('visible');
+      });
+      document.getElementById('openEmotionAlerts')?.addEventListener('click', () => openAlertDetailsModal('Alertas emocionais', 'Estudantes que pedem observação mais próxima na dimensão emocional.', alerts.filter((item) => Number(item.emotional_score || 0) > 0).sort((a, b) => Number(a.emotional_score || 0) - Number(b.emotional_score || 0))));
+      document.getElementById('openOrgAlerts')?.addEventListener('click', () => openAlertDetailsModal('Alertas de organização', 'Estudantes com sinais de atenção em rotina, constância e autonomia.', alerts.filter((item) => Number(item.organization_score || 0) > 0).sort((a, b) => Number(a.organization_score || 0) - Number(b.organization_score || 0))));
+
+      setInsightChatContext({
+        context: `Dashboard institucional com média geral ${Number(overview.average_overall_score || 0).toFixed(2)}, dimensão crítica ${formatDimensionLabel(overview.critical_dimension || '-')}, e ${Number(alerts.length || 0)} alerta(s) prioritário(s).`,
+        suggestions: ['Onde agir primeiro?', 'Quais alertas estão mais críticos?', 'Como interpretar a média geral?']
+      });
       setLoadingState(false);
     }
 

@@ -63,6 +63,7 @@ function signUser(user, tenant) {
         trial_ends_at: tenant.trial_ends_at,
         subscription_status: tenant.subscription_status,
         primary_color: tenant.primary_color,
+        logo_url: tenant.logo_url,
         billing_email: tenant.billing_email,
         current_subscription_id: tenant.current_subscription_id,
         secondary_color: tenant.secondary_color,
@@ -93,7 +94,7 @@ export async function me(req, res) {
   const result = await query(`
     SELECT u.id, u.full_name, u.email, u.role, u.school_name, u.is_active, u.tenant_id, u.is_platform_admin,
       t.name AS tenant_name, t.slug AS tenant_slug, t.plan, t.status, t.trial_ends_at, t.subscription_status, t.primary_color,
-      t.secondary_color, t.accent_color, t.branding_json, t.billing_email, t.current_subscription_id
+      t.logo_url, t.secondary_color, t.accent_color, t.branding_json, t.billing_email, t.current_subscription_id
     FROM users u
     LEFT JOIN tenants t ON t.id = u.tenant_id
     WHERE u.id = $1
@@ -101,7 +102,7 @@ export async function me(req, res) {
   const row = result.rows[0] || null;
   if (!row) return res.json(null);
   row.features = buildFeatures({ plan: row.plan });
-  row.branding = { primary_color: row.primary_color, secondary_color: row.secondary_color, accent_color: row.accent_color, branding_json: row.branding_json };
+  row.branding = { primary_color: row.primary_color, secondary_color: row.secondary_color, accent_color: row.accent_color, logo_url: row.logo_url, branding_json: row.branding_json };
   row.restricted = !tenantAccessState({
     plan: row.plan,
     status: row.status,

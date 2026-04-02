@@ -16,6 +16,7 @@ async function getReportRecord(assessmentId, tenantId) {
       t.name AS tenant_name,
       t.slug AS tenant_slug,
       t.primary_color,
+      t.logo_url,
       t.secondary_color,
       t.accent_color,
       t.branding_json

@@ -27,8 +27,18 @@
       return ({ student:'🧒', teacher:'👩‍🏫', guardian:'👨‍👩‍👧', institutional:'🏫' })[type] || '✨';
     }
 
+    function descriptionFor(dimension) {
+      return ({
+        cognitive: 'Observe foco, compreensão e resolução de problemas nas situações do cotidiano.',
+        organization: 'Pense em rotina, constância, autonomia e capacidade de manter combinados.',
+        relational: 'Considere convivência, colaboração, comunicação e vínculo com outras pessoas.',
+        emotional: 'Avalie autorregulação, reação a frustrações, segurança e estabilidade emocional.'
+      })[dimension] || 'Avalie com base na vivência real do respondente.';
+    }
+
     function render(payload) {
       const { respondent, questions } = payload;
+      const orderedDimensions = ['cognitive','organization','relational','emotional'].filter((dimension) => questions.some((q) => q.dimension === dimension));
       mount.innerHTML = `
         <section class="hero-public card whimsical-card">
           <div class="eyebrow">${iconFor(respondent.respondent_type)} Convite de avaliação</div>
@@ -37,33 +47,89 @@
           <div class="grid-3 compact-metrics" style="margin-top:18px;">
             <div class="inline-chip"><strong>Estudante</strong><span>${escapeHtml(respondent.student_name)}</span></div>
             <div class="inline-chip"><strong>Ciclo</strong><span>${escapeHtml(respondent.cycle_title || 'Ciclo aberto')}</span></div>
-            <div class="inline-chip"><strong>Seu papel</strong><span>${escapeHtml(formatDimensionLabel(respondent.respondent_type) || respondent.respondent_type)}</span></div>
+            <div class="inline-chip"><strong>Seu papel</strong><span>${escapeHtml(respondent.respondent_type)}</span></div>
           </div>
         </section>
         <section class="card" style="margin-top:20px;">
-          <div class="toolbar"><div><h2 style="margin:0;">Avaliação ${escapeHtml(respondent.method_name || 'C.O.R.E. 360')}</h2><div class="muted">Marque de 1 a 5, onde 1 representa maior fragilidade e 5 maior consistência observada.</div></div><span class="status-badge status-${escapeHtml(respondent.status)}">${respondent.status === 'completed' ? 'Respondido' : 'Pendente'}</span></div>
-          <form id="respondentForm" style="margin-top:18px;">
-            <div class="question-groups">
-              ${['cognitive','organization','relational','emotional'].map((dimension) => {
-                const group = questions.filter((q) => q.dimension === dimension);
-                if (!group.length) return '';
-                return `<div class="question-group"><div class="section-heading"><div class="eyebrow">${escapeHtml(formatDimensionLabel(dimension))}</div><h3>${escapeHtml(formatDimensionLabel(dimension))}</h3></div>${group.map((question) => `
-                  <div class="question playful-question">
-                    <div class="question-topline"><span class="question-pill">${escapeHtml(question.pillar_label)}</span></div>
-                    <div style="margin-top:10px;">${escapeHtml(question.prompt)}</div>
-                    <div class="scale cheerful-scale">${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''}/> <span>${score}</span></label>`).join('')}</div>
-                    <textarea name="comment_${question.id}" placeholder="Comentário opcional para enriquecer a leitura..."></textarea>
-                  </div>`).join('')}</div>`;
-              }).join('')}
+          <div class="toolbar"><div><h2 style="margin:0;">Avaliação ${escapeHtml(respondent.method_name || 'C.O.R.E. 360')}</h2><div class="muted">Agora em estilo wizard: uma dimensão por vez, com foco e melhor experiência no mobile.</div></div><span class="status-badge status-${escapeHtml(respondent.status)}">${respondent.status === 'completed' ? 'Respondido' : 'Pendente'}</span></div>
+          <form id="respondentForm" class="wizard-shell" style="margin-top:18px;">
+            <div class="step-indicator wizard-steps">
+              <div class="wizard-progress-shell">
+                <div class="wizard-progress-head">
+                  <strong>Progresso da resposta</strong>
+                  <span id="wizardProgressLabel" class="muted">Etapa 1 de ${orderedDimensions.length}</span>
+                </div>
+                <div class="wizard-progress-bar"><span id="wizardProgressBar" style="width:${Math.round(100 / Math.max(orderedDimensions.length, 1))}%;"></span></div>
+                <div class="wizard-step-grid">
+                  ${orderedDimensions.map((dimension, index) => `<div class="step-chip ${index === 0 ? 'active' : ''}" data-step-chip="${index}">${escapeHtml(formatDimensionLabel(dimension))}</div>`).join('')}
+                </div>
+              </div>
             </div>
-            <div class="form-actions sticky-actions">
-              <span class="muted">Leva cerca de 3 a 5 minutos.</span>
-              <button class="btn success" type="submit">Enviar minha contribuição</button>
+
+            ${orderedDimensions.map((dimension, index) => {
+              const group = questions.filter((q) => q.dimension === dimension);
+              return `
+                <section class="wizard-stage ${index === 0 ? 'active' : ''}" data-step="${index}">
+                  <div class="question-group-intro">
+                    <div class="eyebrow">${escapeHtml(formatDimensionLabel(dimension))}</div>
+                    <h3 style="margin:8px 0 0;">${escapeHtml(formatDimensionLabel(dimension))}</h3>
+                    <p>${escapeHtml(descriptionFor(dimension))}</p>
+                  </div>
+                  <div class="wizard-question-list">
+                    ${group.map((question) => `
+                      <div class="question playful-question">
+                        <div class="question-topline"><span class="question-pill">${escapeHtml(question.pillar_label)}</span></div>
+                        <div>${escapeHtml(question.prompt)}</div>
+                        <div class="scale cheerful-scale">${[1,2,3,4,5].map((score) => `<label><input type="radio" name="question_${question.id}" value="${score}" ${score === 3 ? 'checked' : ''}/> <span>${score}</span></label>`).join('')}</div>
+                        <textarea name="comment_${question.id}" placeholder="Comentário opcional para enriquecer a leitura..."></textarea>
+                      </div>`).join('')}
+                  </div>
+                </section>
+              `;
+            }).join('')}
+
+            <div class="wizard-nav">
+              <button type="button" class="btn subtle" id="prevStepBtn">Voltar</button>
+              <div class="wizard-step-summary"><span class="muted">Leva cerca de 3 a 5 minutos.</span></div>
+              <button type="button" class="btn" id="nextStepBtn">Próxima etapa</button>
+              <button class="btn success" type="submit" id="submitWizardBtn" style="display:none;">Enviar minha contribuição</button>
             </div>
           </form>
-        </section>`;
+        </section>
+        <footer class="public-footer">© ${new Date().getFullYear()} LoopinEdu. Todos os direitos reservados.</footer>`;
 
-      document.getElementById('respondentForm').addEventListener('submit', async (event) => {
+      const form = document.getElementById('respondentForm');
+      const stages = [...form.querySelectorAll('.wizard-stage')];
+      const chips = [...form.querySelectorAll('[data-step-chip]')];
+      const progressBar = document.getElementById('wizardProgressBar');
+      const progressLabel = document.getElementById('wizardProgressLabel');
+      const prevBtn = document.getElementById('prevStepBtn');
+      const nextBtn = document.getElementById('nextStepBtn');
+      const submitBtn = document.getElementById('submitWizardBtn');
+      let currentStep = 0;
+
+      function syncWizard() {
+        stages.forEach((stage, index) => stage.classList.toggle('active', index === currentStep));
+        chips.forEach((chip, index) => chip.classList.toggle('active', index === currentStep));
+        progressBar.style.width = `${Math.round(((currentStep + 1) / stages.length) * 100)}%`;
+        progressLabel.textContent = `Etapa ${currentStep + 1} de ${stages.length}`;
+        prevBtn.style.visibility = currentStep === 0 ? 'hidden' : 'visible';
+        nextBtn.style.display = currentStep === stages.length - 1 ? 'none' : 'inline-flex';
+        submitBtn.style.display = currentStep === stages.length - 1 ? 'inline-flex' : 'none';
+        stages[currentStep]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      prevBtn.addEventListener('click', () => {
+        currentStep = Math.max(0, currentStep - 1);
+        syncWizard();
+      });
+      nextBtn.addEventListener('click', () => {
+        currentStep = Math.min(stages.length - 1, currentStep + 1);
+        syncWizard();
+      });
+      syncWizard();
+
+      form.addEventListener('submit', async (event) => {
         event.preventDefault();
         setLoadingState(true, 'Enviando sua contribuição...');
         try {
@@ -75,7 +141,7 @@
           }));
           await request(`/public/respondent/${token}/responses`, { method: 'POST', body: JSON.stringify({ answers }) });
           showToast('Resposta enviada com sucesso. Obrigado!');
-          mount.innerHTML = `<section class="card success-panel"><div class="hero-badge">🎉 Obrigado!</div><h1>Contribuição recebida</h1><p class="lead">Sua resposta já foi registrada no LoopinEdu e agora faz parte do diagnóstico 360º do estudante.</p></section>`;
+          mount.innerHTML = `<section class="card success-panel"><div class="hero-badge">🎉 Obrigado!</div><h1>Contribuição recebida</h1><p class="lead">Sua resposta já foi registrada no LoopinEdu e agora faz parte do diagnóstico 360º do estudante.</p></section><footer class="public-footer">© ${new Date().getFullYear()} LoopinEdu. Todos os direitos reservados.</footer>`;
           setLoadingState(false);
         } catch (error) {
           setLoadingState(false);

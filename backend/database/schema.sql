@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS students (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 ALTER TABLE students ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS guardian_phone TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_data_url TEXT;
 
 CREATE TABLE IF NOT EXISTS assessment_cycles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -255,3 +257,27 @@ ALTER TABLE payment_transactions ALTER COLUMN provider SET DEFAULT 'internal';
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS payment_method_id TEXT;
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS payment_type_id TEXT;
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+
+
+CREATE TABLE IF NOT EXISTS roadmap_cards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  version_label TEXT NOT NULL,
+  phase_label TEXT,
+  category TEXT NOT NULL DEFAULT 'product',
+  badge_label TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog','development','testing','approved','done','production')),
+  priority_label TEXT,
+  impact_label TEXT,
+  complexity_label TEXT,
+  owner_label TEXT,
+  progress_percent INT NOT NULL DEFAULT 0,
+  sort_order INT NOT NULL DEFAULT 0,
+  meta_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_roadmap_cards_tenant_status_order ON roadmap_cards(tenant_id, status, sort_order, created_at);
